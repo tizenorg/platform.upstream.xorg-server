@@ -5704,7 +5704,6 @@ ProcXkbGetKbdByName(ClientPtr client)
     XkbComponentNamesRec names = { 0 };
     XkbDescPtr xkb, new;
     unsigned char *str;
-    char mapFile[PATH_MAX];
     unsigned len;
     unsigned fwant, fneed, reported;
     int status;
@@ -5762,7 +5761,6 @@ ProcXkbGetKbdByName(ClientPtr client)
         geom_changed = FALSE;
     }
 
-    memset(mapFile, 0, PATH_MAX);
     rep.type = X_Reply;
     rep.deviceID = dev->id;
     rep.sequenceNumber = client->sequence;
@@ -5784,8 +5782,7 @@ ProcXkbGetKbdByName(ClientPtr client)
     }
 
     /* We pass dev in here so we can get the old names out if needed. */
-    rep.found = XkbDDXLoadKeymapByNames(dev, &names, fwant, fneed, &new,
-                                        mapFile, PATH_MAX);
+    rep.found = XkbDDXLoadKeymapByNames(dev, &names, fwant, fneed, &new, NULL);
     rep.newKeyboard = FALSE;
     rep.pad1 = rep.pad2 = rep.pad3 = rep.pad4 = 0;
 

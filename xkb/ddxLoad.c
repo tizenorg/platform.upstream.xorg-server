@@ -69,24 +69,30 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #endif
 
 static void
-OutputDirectory(char *outdir, size_t size)
+OutputDirectory(char *outdir, size_t size, Bool *is_private_directory)
 {
 #ifndef WIN32
     /* Can we write an xkm and then open it too? */
     if (access(XKM_OUTPUT_DIR, W_OK | X_OK) == 0 &&
         (strlen(XKM_OUTPUT_DIR) < size)) {
         (void) strcpy(outdir, XKM_OUTPUT_DIR);
+        if (is_private_directory)
+            *is_private_directory = TRUE;
     }
     else
 #else
     if (strlen(Win32TempDir()) + 1 < size) {
         (void) strcpy(outdir, Win32TempDir());
         (void) strcat(outdir, "\\");
+        if (is_private_directory)
+            *is_private_directory = FALSE;
     }
     else
 #endif
     if (strlen("/tmp/") < size) {
         (void) strcpy(outdir, "/tmp/");
+        if (is_private_directory)
+            *is_private_directory = FALSE;
     }
 }
 
@@ -94,10 +100,10 @@ static Bool
 XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
                            XkbComponentNamesPtr names,
                            unsigned want,
-                           unsigned need, char *nameRtrn, int nameRtrnLen)
+                           unsigned need, char *file_name)
 {
     FILE *out;
-    char *buf = NULL, keymap[PATH_MAX], xkm_output_dir[PATH_MAX];
+    char *buf = NULL;
 
     const char *emptystring = "";
     char *xkbbasedirflag = NULL;
@@ -112,10 +118,6 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
 #else
     const char *xkmfile = "-";
 #endif
-
-    snprintf(keymap, sizeof(keymap), "server-%s", display);
-
-    OutputDirectory(xkm_output_dir, sizeof(xkm_output_dir));
 
 #ifdef WIN32
     strcpy(tmpname, Win32TempDir());
@@ -141,13 +143,13 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
 
     if (asprintf(&buf,
                  "\"%s%sxkbcomp\" -w %d %s -xkm \"%s\" "
-                 "-em1 %s -emp %s -eml %s \"%s%s.xkm\"",
+                 "-em1 %s -emp %s -eml %s \"%s\"",
                  xkbbindir, xkbbindirsep,
                  ((xkbDebugFlags < 2) ? 1 :
                   ((xkbDebugFlags > 10) ? 10 : (int) xkbDebugFlags)),
                  xkbbasedirflag ? xkbbasedirflag : "", xkmfile,
                  PRE_ERROR_MSG, ERROR_PREFIX, POST_ERROR_MSG1,
-                 xkm_output_dir, keymap) == -1)
+                 file_name) == -1)
         buf = NULL;
 
     free(xkbbasedirflag);
@@ -180,9 +182,6 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
         {
             if (xkbDebugFlags)
                 DebugF("[xkb] xkb executes: %s\n", buf);
-            if (nameRtrn) {
-                strlcpy(nameRtrn, keymap, nameRtrnLen);
-            }
             free(buf);
 #ifdef WIN32
             unlink(tmpname);
@@ -190,7 +189,7 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
             return TRUE;
         }
         else
-            LogMessage(X_ERROR, "Error compiling keymap (%s)\n", keymap);
+            LogMessage(X_ERROR, "Error compiling keymap (%s)\n", file_name);
 #ifdef WIN32
         /* remove the temporary file */
         unlink(tmpname);
@@ -203,46 +202,58 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
         LogMessage(X_ERROR, "Could not open file %s\n", tmpname);
 #endif
     }
-    if (nameRtrn)
-        nameRtrn[0] = '\0';
     free(buf);
     return FALSE;
 }
 
-static FILE *
-XkbDDXOpenConfigFile(char *mapName, char *fileNameRtrn, int fileNameRtrnLen)
+static char *
+xkb_config_pathname(char *filename, Bool *is_private_directory)
 {
-    char buf[PATH_MAX], xkm_output_dir[PATH_MAX];
-    FILE *file;
+    char        xkm_output_dir[PATH_MAX];
+    char        *pathname;
 
-    buf[0] = '\0';
-    if (mapName != NULL) {
-        OutputDirectory(xkm_output_dir, sizeof(xkm_output_dir));
-        if ((XkbBaseDirectory != NULL) && (xkm_output_dir[0] != '/')
+    OutputDirectory(xkm_output_dir, sizeof (xkm_output_dir), is_private_directory);
+
+    if ((XkbBaseDirectory != NULL) && (xkm_output_dir[0] != '/')
 #ifdef WIN32
-            && (!isalpha(xkm_output_dir[0]) || xkm_output_dir[1] != ':')
+        && (!isalpha(xkm_output_dir[0]) || xkm_output_dir[1] != ':')
 #endif
-            ) {
-            if (snprintf(buf, PATH_MAX, "%s/%s%s.xkm", XkbBaseDirectory,
-                         xkm_output_dir, mapName) >= PATH_MAX)
-                buf[0] = '\0';
-        }
-        else {
-            if (snprintf(buf, PATH_MAX, "%s%s.xkm", xkm_output_dir, mapName)
-                >= PATH_MAX)
-                buf[0] = '\0';
-        }
-        if (buf[0] != '\0')
-            file = fopen(buf, "rb");
-        else
-            file = NULL;
+        ) {
+        if (asprintf (&pathname, "%s%s%s", XkbBaseDirectory,
+                      xkm_output_dir, filename) <= 0)
+            pathname = NULL;
     }
-    else
-        file = NULL;
-    if ((fileNameRtrn != NULL) && (fileNameRtrnLen > 0)) {
-        strlcpy(fileNameRtrn, buf, fileNameRtrnLen);
+    else {
+        if (asprintf (&pathname, "%s%s", xkm_output_dir, filename) <= 0)
+            pathname = NULL;
     }
-    return file;
+    return pathname;
+}
+
+static unsigned
+xkb_load_keymap_file(char *file_name, unsigned want, unsigned need, XkbDescPtr *xkbRtrn)
+{
+    FILE *file;
+    unsigned missing;
+
+    file = fopen(file_name, "r");
+    if (file == NULL) {
+        LogMessage(X_ERROR, "Couldn't open compiled keymap file %s\n",
+                   file_name);
+        return 0;
+    }
+    missing = XkmReadFile(file, need, want, xkbRtrn);
+    if (*xkbRtrn == NULL) {
+        LogMessage(X_ERROR, "Error loading keymap %s\n", file_name);
+        fclose(file);
+        return 0;
+    }
+    else {
+        DebugF("Loaded XKB keymap %s, defined=0x%x\n", file_name,
+               (*xkbRtrn)->defined);
+    }
+    fclose(file);
+    return (need | want) & (~missing);
 }
 
 unsigned
@@ -250,12 +261,21 @@ XkbDDXLoadKeymapByNames(DeviceIntPtr keybd,
                         XkbComponentNamesPtr names,
                         unsigned want,
                         unsigned need,
-                        XkbDescPtr *xkbRtrn, char *nameRtrn, int nameRtrnLen)
+                        XkbDescPtr *xkbRtrn, char *file_name)
 {
     XkbDescPtr xkb;
-    FILE *file;
-    char fileName[PATH_MAX];
-    unsigned missing;
+    unsigned provided;
+    char *local_file_name = file_name;
+
+    if (!file_name) {
+        char    local_name[PATH_MAX];
+
+        if (snprintf(local_name, sizeof (local_name), "server-%s.xkm", display) >= sizeof (local_name))
+            return 0;
+        local_file_name = xkb_config_pathname (local_name, NULL);
+        if (local_file_name == NULL)
+            return 0;
+    }
 
     *xkbRtrn = NULL;
     if ((keybd == NULL) || (keybd->key == NULL) ||
@@ -268,33 +288,31 @@ XkbDDXLoadKeymapByNames(DeviceIntPtr keybd,
         (names->geometry == NULL)) {
         LogMessage(X_ERROR, "XKB: No components provided for device %s\n",
                    keybd->name ? keybd->name : "(unnamed keyboard)");
+        if (local_file_name != file_name)
+            free(local_file_name);
         return 0;
     }
     else if (!XkbDDXCompileKeymapByNames(xkb, names, want, need,
-                                         nameRtrn, nameRtrnLen)) {
+                                         file_name)) {
         LogMessage(X_ERROR, "XKB: Couldn't compile keymap\n");
+        if (local_file_name != file_name)
+            free(local_file_name);
         return 0;
     }
-    file = XkbDDXOpenConfigFile(nameRtrn, fileName, PATH_MAX);
-    if (file == NULL) {
-        LogMessage(X_ERROR, "Couldn't open compiled keymap file %s\n",
-                   fileName);
+
+    provided = xkb_load_keymap_file(file_name, want, need, xkbRtrn);
+
+    if (!xkbRtrn) {
+        unlink(local_file_name);
+        if (local_file_name != file_name)
+            free(local_file_name);
         return 0;
     }
-    missing = XkmReadFile(file, need, want, xkbRtrn);
-    if (*xkbRtrn == NULL) {
-        LogMessage(X_ERROR, "Error loading keymap %s\n", fileName);
-        fclose(file);
-        (void) unlink(fileName);
-        return 0;
+    if (local_file_name != file_name) {
+        unlink(local_file_name);
+        free(local_file_name);
     }
-    else {
-        DebugF("Loaded XKB keymap %s, defined=0x%x\n", fileName,
-               (*xkbRtrn)->defined);
-    }
-    fclose(file);
-    (void) unlink(fileName);
-    return (need | want) & (~missing);
+    return provided;
 }
 
 Bool
@@ -370,21 +388,51 @@ static XkbDescPtr
 XkbCompileKeymapForDevice(DeviceIntPtr dev, XkbRMLVOSet * rmlvo, int need)
 {
     XkbDescPtr xkb = NULL;
-    unsigned int provided;
+    unsigned int provided = 0;
     XkbComponentNamesRec kccgst = { 0 };
-    char name[PATH_MAX];
+    char *filename, *pathname;
+    Bool is_private_directory;
+    Bool unlink_on_success = TRUE;
 
-    if (XkbRMLVOtoKcCGST(dev, rmlvo, &kccgst)) {
-        provided =
-            XkbDDXLoadKeymapByNames(dev, &kccgst, XkmAllIndicesMask, need, &xkb,
-                                    name, PATH_MAX);
-        if ((need & provided) != need) {
-            if (xkb) {
-                XkbFreeKeyboard(xkb, 0, TRUE);
-                xkb = NULL;
+    if (asprintf(&filename, "server-%s-%s-%s-%s-%s-%s.xkm",
+                 display,
+                 rmlvo->rules,
+                 rmlvo->model,
+                 rmlvo->layout,
+                 rmlvo->variant,
+                 rmlvo->options) <= 0)
+        return NULL;
+
+    pathname = xkb_config_pathname(filename, &is_private_directory);
+    if (pathname == NULL)
+        return NULL;
+
+#if XKM_CACHE_FILES
+    unlink_on_success = !is_private_directory;
+    if (is_private_directory)
+        provided = xkb_load_keymap_file(pathname, XkmAllIndicesMask, need, &xkb);
+#endif
+
+    if ((need & provided) != need) {
+        (void) unlink(pathname);
+        if (xkb)
+            XkbFreeKeyboard(xkb, 0, TRUE);
+        if (XkbRMLVOtoKcCGST(dev, rmlvo, &kccgst)) {
+            provided = XkbDDXLoadKeymapByNames(dev, &kccgst, XkmAllIndicesMask,
+                                               need, &xkb, pathname);
+            if ((need & provided) != need) {
+                if (xkb) {
+                    (void) unlink(pathname);
+                    XkbFreeKeyboard(xkb, 0, TRUE);
+                    xkb = NULL;
+                }
             }
         }
     }
+
+    if (unlink_on_success)
+        (void) unlink(pathname);
+    free (pathname);
 
     XkbFreeComponentNames(&kccgst, FALSE);
     return xkb;
