@@ -72,6 +72,9 @@ enum EventType {
     ET_RawTouchUpdate,
     ET_RawTouchEnd,
     ET_XQuartz,
+#ifdef _F_GESTURE_EXTENSION_
+    ET_MTSync = 0x7E,
+#endif//_F_GESTURE_EXTENSION_
     ET_Internal = 0xFF          /* First byte */
 };
 

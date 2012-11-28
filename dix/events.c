@@ -1645,9 +1645,11 @@ AllowSome(ClientPtr client, TimeStamp time, DeviceIntPtr thisDev, int newState)
         if (dev == thisDev)
             continue;
         if (devgrabinfo->grab && SameClient(devgrabinfo->grab, client)) {
+#ifndef _F_NO_GRABTIME_UPDATE_
             if (!(thisGrabbed || otherGrabbed) ||
                 (CompareTimeStamps(devgrabinfo->grabTime, grabTime) == LATER))
                 grabTime = devgrabinfo->grabTime;
+#endif//_F_NO_GRABTIME_UPDATE_
             otherGrabbed = TRUE;
             if (grabinfo->sync.other == devgrabinfo->grab)
                 thisSynced = TRUE;

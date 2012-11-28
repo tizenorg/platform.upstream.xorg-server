@@ -158,7 +158,11 @@ OsInit(void)
         struct sigaction act, oact;
         int i;
 
-        int siglist[] = { SIGSEGV, SIGQUIT, SIGILL, SIGFPE, SIGBUS,
+        int siglist[] = { 
+#ifdef _F_NO_CATCH_SIGNAL_
+#else
+            SIGSEGV, SIGQUIT, SIGILL, SIGFPE, SIGBUS,
+#endif
             SIGSYS,
             SIGXCPU,
             SIGXFSZ,

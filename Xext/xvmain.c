@@ -1026,6 +1026,12 @@ XvdiMatchPort(XvPortPtr pPort, DrawablePtr pDraw)
     if (pa->pScreen != pDraw->pScreen)
         return BadMatch;
 
+#ifdef _F_PUT_ON_PIXMAP_
+  if (!((pDraw->type == DRAWABLE_PIXMAP && pa->type & XvPixmapMask) ||
+        (pDraw->type == DRAWABLE_WINDOW && pa->type & XvWindowMask)))
+    return BadMatch;
+#endif
+
     nf = pa->nFormats;
     pf = pa->pFormats;
 

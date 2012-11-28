@@ -533,8 +533,20 @@ compNewPixmap(WindowPtr pWin, int x, int y, int w, int h)
     WindowPtr pParent = pWin->parent;
     PixmapPtr pPixmap;
 
+#ifndef _F_COMP_OVL_PATCH
     pPixmap = (*pScreen->CreatePixmap) (pScreen, w, h, pWin->drawable.depth,
                                         CREATE_PIXMAP_USAGE_BACKING_PIXMAP);
+#else
+    CompScreenPtr cs = GetCompScreen(pScreen);
+    if(IsParent(cs->pOverlayWin, pWin)) {
+        pPixmap = (*pScreen->CreatePixmap) (pScreen, w, h, pWin->drawable.depth,
+                                            CREATE_PIXMAP_USAGE_OVERLAY);
+    }
+    else {
+        pPixmap = (*pScreen->CreatePixmap) (pScreen, w, h, pWin->drawable.depth,
+                                            CREATE_PIXMAP_USAGE_BACKING_PIXMAP);
+    }
+#endif
 
     if (!pPixmap)
         return 0;

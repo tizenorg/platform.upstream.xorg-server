@@ -938,6 +938,11 @@ positionSprite(DeviceIntPtr dev, int mode, ValuatorMask *mask,
     if (!dev->valuator || dev->valuator->numAxes < 2)
         return scr;
 
+#ifdef _F_IGNORE_MOVE_SPRITE_FOR_FLOATING_POINTER_
+    if(!dev->coreEvents)
+        return scr;
+#endif//_F_IGNORE_MOVE_SPRITE_FOR_FLOATING_POINTER_
+
     tmpx = *screenx;
     tmpy = *screeny;
 

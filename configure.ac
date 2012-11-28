@@ -595,6 +595,7 @@ AC_ARG_WITH(khronos-spec-dir, AS_HELP_STRING([--with-khronos-spec-dir=PATH], [Pa
 dnl Extensions.
 AC_ARG_ENABLE(registry,       AS_HELP_STRING([--disable-registry], [Build string registry module (default: enabled)]), [XREGISTRY=$enableval], [XREGISTRY=yes])
 AC_ARG_ENABLE(composite,      AS_HELP_STRING([--disable-composite], [Build Composite extension (default: enabled)]), [COMPOSITE=$enableval], [COMPOSITE=yes])
+AC_ARG_ENABLE(gesture,	      AS_HELP_STRING([--disable-gesture], [Build Gesture extension (default: enabled)]), [GESTURE=$enableval], [GESTURE=yes])
 AC_ARG_ENABLE(mitshm,         AS_HELP_STRING([--disable-mitshm], [Build SHM extension (default: auto)]), [MITSHM=$enableval], [MITSHM=auto])
 AC_ARG_ENABLE(xres,           AS_HELP_STRING([--disable-xres], [Build XRes extension (default: enabled)]), [RES=$enableval], [RES=yes])
 AC_ARG_ENABLE(record,         AS_HELP_STRING([--disable-record], [Build Record extension (default: enabled)]), [RECORD=$enableval], [RECORD=yes])
@@ -770,6 +771,7 @@ XEXT_LIB='$(top_builddir)/Xext/libXext.la'
 dnl Optional modules
 VIDEOPROTO="videoproto"
 COMPOSITEPROTO="compositeproto >= 0.4"
+GESTUREPROTO="gestureproto >= 0.1.0"
 RECORDPROTO="recordproto >= 1.13.99.1"
 SCRNSAVERPROTO="scrnsaverproto >= 1.1"
 RESOURCEPROTO="resourceproto >= 1.2.0"
@@ -999,6 +1001,14 @@ fi
 AM_CONDITIONAL(XREGISTRY, [test "x$XREGISTRY" = xyes])
 if test "x$XREGISTRY" = xyes; then
 	AC_DEFINE(XREGISTRY, 1, [Build registry module])
+fi
+
+AM_CONDITIONAL(GESTURE, [test "x$GESTURE" = xyes])
+if test "x$GESTURE" = xyes; then
+	AC_DEFINE(GESTURE, 1, [Support Gesture Extension])
+	REQUIRED_MODULES="$REQUIRED_MODULES $GESTUREPROTO"
+	GESTURE_LIB='$(top_builddir)/gesture/libgesture.la'
+	GESTURE_INC='-I$(top_srcdir)/gesture'
 fi
 
 AM_CONDITIONAL(COMPOSITE, [test "x$COMPOSITE" = xyes])
@@ -1543,7 +1553,7 @@ AC_EGREP_CPP([I_AM_SVR4],[
 AC_DEFINE([SVR4],1,[Define to 1 on systems derived from System V Release 4])
 AC_MSG_RESULT([yes])], AC_MSG_RESULT([no]))
 
-XSERVER_CFLAGS="$XSERVER_CFLAGS $CORE_INCS $XEXT_INC $COMPOSITE_INC $DAMAGE_INC $FIXES_INC $XI_INC $MI_INC $MIEXT_SYNC_INC $MIEXT_SHADOW_INC $MIEXT_LAYER_INC $MIEXT_DAMAGE_INC $RENDER_INC $RANDR_INC $FB_INC $DBE_INC"
+XSERVER_CFLAGS="$XSERVER_CFLAGS $CORE_INCS $XEXT_INC $GESTURE_INC $COMPOSITE_INC $DAMAGE_INC $FIXES_INC $XI_INC $MI_INC $MIEXT_SYNC_INC $MIEXT_SHADOW_INC $MIEXT_LAYER_INC $MIEXT_DAMAGE_INC $RENDER_INC $RANDR_INC $FB_INC $DBE_INC"
 
 dnl ---------------------------------------------------------------------------
 dnl DDX section.
@@ -1602,7 +1612,7 @@ if test "x$XORG" = xyes; then
 	XORG_OSINCS='-I$(top_srcdir)/hw/xfree86/os-support -I$(top_srcdir)/hw/xfree86/os-support/bus -I$(top_srcdir)/os'
 	XORG_INCS="$XORG_DDXINCS $XORG_OSINCS"
 	XORG_CFLAGS="$XORGSERVER_CFLAGS -DHAVE_XORG_CONFIG_H"
-	XORG_LIBS="$COMPOSITE_LIB $FIXES_LIB $XEXT_LIB $DBE_LIB $RECORD_LIB $RANDR_LIB $RENDER_LIB $DAMAGE_LIB $MIEXT_SYNC_LIB $MIEXT_DAMAGE_LIB $XI_LIB $XKB_LIB"
+	XORG_LIBS="$GESTURE_LIB $COMPOSITE_LIB $FIXES_LIB $XEXT_LIB $DBE_LIB $RECORD_LIB $RANDR_LIB $RENDER_LIB $DAMAGE_LIB $MIEXT_SYNC_LIB $MIEXT_DAMAGE_LIB $XI_LIB $XKB_LIB"
 
 	dnl ==================================================================
 	dnl symbol visibility
@@ -2209,6 +2219,7 @@ AC_OUTPUT([
 Makefile
 glx/Makefile
 include/Makefile
+gesture/Makefile
 composite/Makefile
 damageext/Makefile
 dbe/Makefile

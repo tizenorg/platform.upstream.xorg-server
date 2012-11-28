@@ -1465,6 +1465,11 @@ XkbFakeDeviceButton(DeviceIntPtr dev, Bool press, int button)
     else
         return;
 
+#ifdef _F_DO_NULL_CHECK_AT_XKBFAKEDEVICEBUTTON_
+    if (!ptr)
+        return;		
+#endif /* #ifdef _F_DO_NULL_CHECK_AT_XKBFAKEDEVICEBUTTON_ */
+
     down = button_is_down(ptr, button, BUTTON_PROCESSED);
     if (press == down)
         return;
