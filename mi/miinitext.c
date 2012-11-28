@@ -240,6 +240,9 @@ EnableDisableExtensionError(const char *name, Bool enable)
 static ExtensionModule staticExtensions[] = {
     {GEExtensionInit, "Generic Event Extension", &noGEExtension},
     {ShapeExtensionInit, "SHAPE", NULL},
+#ifdef _F_GESTURE_EXTENSION_
+    { GestureExtensionInit, "X Gesture Extension", NULL},
+#endif//_F_GESTURE_EXTENSION_
 #ifdef MITSHM
     {ShmExtensionInit, SHMNAME, &noMITShmExtension},
 #endif

@@ -232,6 +232,26 @@ device_added(struct udev_device *udev_device)
     if (rc != Success)
         goto unwind;
 
+#ifdef _F_UDEV_DEBUG_
+    else
+    {
+	    if( attrs.flags == ATTR_POINTER )
+		    ErrorF("[X11] Input Device Added ... (name=%s, path=%s, type=POINTER)\n", name, path);
+	    else if( attrs.flags == ATTR_KEYBOARD )
+		    ErrorF("[X11] Input Device Added ... (name=%s, path=%s, type=KEYBOARD)\n", name, path);
+	    else if( attrs.flags == ATTR_JOYSTICK )
+		    ErrorF("[X11] Input Device Added ... (name=%s, path=%s, type=JOYSTICK)\n", name, path);
+	    else if( attrs.flags == ATTR_TABLET )
+		    ErrorF("[X11] Input Device Added ... (name=%s, path=%s, type=TABLET)\n", name, path);
+	    else if( attrs.flags == ATTR_TOUCHPAD )
+		    ErrorF("[X11] Input Device Added ... (name=%s, path=%s, type=TOUCHPAD)\n", name, path);
+	    else if( attrs.flags == ATTR_TOUCHSCREEN )
+		    ErrorF("[X11] Input Device Added ... (name=%s, path=%s, type=TOUCHSCREEN)\n", name, path);
+	    else
+		    ErrorF("[X11] Input Device Added ... (name=%s, path=%s, type=UNKNOWN)\n", name, path);
+    }
+#endif//_F_UDEV_DEBUG_
+
  unwind:
     free(config_info);
     input_option_free_list(&input_options);

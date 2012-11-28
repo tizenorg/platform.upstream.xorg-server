@@ -144,7 +144,11 @@ typedef struct {
 
 typedef struct {
     unsigned long base_id;
+#ifdef _F_PUT_ON_PIXMAP_
+    unsigned int type;
+#else
     unsigned char type;
+#endif
     char *name;
     int nEncodings;
     XvEncodingPtr pEncodings;

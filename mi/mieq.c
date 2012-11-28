@@ -534,10 +534,25 @@ mieqProcessDeviceEvent(DeviceIntPtr dev, InternalEvent *event, ScreenPtr screen)
     default:
         break;
     }
+#ifdef _F_GESTURE_EXTENSION_
+    switch (event->any.type)
+    {
+	case ET_MTSync:
+		master = NULL;
+		break;
+
+	default:
+	    master = CopyGetMasterEvent(dev, event, &mevent);
+
+	    if (master)
+        	master->lastSlave = dev;
+    }
+#else//_F_GESTURE_EXTENSION_
     master = CopyGetMasterEvent(dev, event, &mevent);
 
     if (master)
         master->lastSlave = dev;
+#endif//_F_GESTURE_EXTENSION_
 
     /* If someone's registered a custom event handler, let them
      * steal it. */

@@ -214,6 +214,12 @@ extern _X_EXPORT void ResizeChildrenWinSize(WindowPtr /*pWin */ ,
                                             int /*dw */ ,
                                             int /*dh */ );
 
+#ifdef _F_GESTURE_EXTENSION_
+extern _X_EXPORT Bool GestureExtensionInit(void);
+#endif//_F_GESTURE_EXTENSION_
+
+extern _X_EXPORT void ShapeExtensionInit(void);
+
 extern _X_EXPORT void SendShapeNotify(WindowPtr /* pWin */ ,
                                       int /* which */);
 

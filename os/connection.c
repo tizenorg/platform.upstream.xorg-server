@@ -1183,9 +1183,19 @@ IgnoreClient(ClientPtr client)
 void
 AttendClient(ClientPtr client)
 {
+#ifdef _F_CHECK_NULL_CLIENT_
+    OsCommPtr oc;
+    int connection;
+
+    if (client == NULL ||client->osPrivate == NULL)
+        return;
+
+    oc = (OsCommPtr)client->osPrivate;
+    connection = oc->fd;
+#else
     OsCommPtr oc = (OsCommPtr) client->osPrivate;
     int connection = oc->fd;
-
+#endif
     client->ignoreCount--;
     if (client->ignoreCount)
         return;

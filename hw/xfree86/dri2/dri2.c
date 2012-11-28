@@ -490,7 +490,9 @@ allocate_or_reuse_buffer(DrawablePtr pDraw, DRI2ScreenPtr ds,
     int old_buf = find_attachment(pPriv, attachment);
 
     if ((old_buf < 0)
+#ifndef _F_NOT_ALWAYS_CREATE_FRONTBUFFER_
         || attachment == DRI2BufferFrontLeft
+#endif
         || !dimensions_match || (pPriv->buffers[old_buf]->format != format)) {
         *buffer = create_buffer (pDraw, attachment, format);
         pPriv->serialNumber = DRI2DrawableSerial(pDraw);

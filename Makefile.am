@@ -39,6 +39,7 @@ SUBDIRS = \
 	$(GLX_DIR) \
 	exa \
 	config \
+	gesture \
 	hw \
 	test
 
