@@ -7,7 +7,7 @@ Url:            http://www.x.org
 Group:          System/X11
 Source0:        %{name}-%{version}.tar.bz2
 BuildRequires:  libgcrypt-devel
-BuildRequires:  xorg-x11-proto-gesture
+BuildRequires:  pkgconfig(gestureproto)
 BuildRequires:  pkgconfig(xf86dgaproto)
 BuildRequires:  pkgconfig(bigreqsproto)
 BuildRequires:  pkgconfig(compositeproto)
@@ -150,7 +150,6 @@ drivers, input drivers, or other X modules should install this package.
 	--with-default-font-path="built-ins" \
 	--disable-install-setuid \
 	--with-sha1=libgcrypt \
-	--enable-gestures \
 	CFLAGS="${CFLAGS} \
 		-Wall -g \
 		-D_F_UDEV_DEBUG_ \
