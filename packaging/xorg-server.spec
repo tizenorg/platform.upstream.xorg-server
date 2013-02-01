@@ -1,8 +1,8 @@
 Name:           xorg-server
-Version:        1.13.0
+Version:        1.13.1
 Release:        1
 License:        MIT
-Summary:        X
+Summary:        X Server
 Url:            http://www.x.org
 Group:          System/X11
 Source0:        %{name}-%{version}.tar.bz2
