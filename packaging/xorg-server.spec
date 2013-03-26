@@ -1,10 +1,10 @@
 Name:           xorg-server
-Version:        1.13.1
+Version:        1.13.3
 Release:        1
 License:        MIT
 Summary:        X Server
 Url:            http://www.x.org
-Group:          System/X11
+Group:          Graphics/X Window System
 Source0:        %{name}-%{version}.tar.bz2
 BuildRequires:  libgcrypt-devel
 BuildRequires:  pkgconfig(gestureproto)
@@ -53,12 +53,11 @@ Provides:	xorg-x11-server-Xorg
 Obsoletes:	xorg-x11-server-Xorg < 1.13.0
 
 %description
-Description: %{summary}
-
+X.org X Server
 
 %package devel
 Summary:        SDK for X server driver module development
-Group:          System/X11
+Group:          Development/Libraries
 Requires:       %{name} = %{version}
 Requires:       libpciaccess-devel
 Requires:       pixman-devel
@@ -176,9 +175,10 @@ rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 
 %files
 %defattr(-,root,root,-)
+%license COPYING
 %{_libdir}/xorg/protocol.txt
 %{_bindir}/X
-%attr(4755,root,root) %{_bindir}/Xorg
+%{_bindir}/Xorg
 %{_bindir}/gtf
 %{_bindir}/cvt
 %dir %{_libdir}/xorg
