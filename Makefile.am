@@ -17,6 +17,10 @@ if RECORD
 RECORD_DIR=record
 endif
 
+if GESTURE
+GESTURE_DIR=gesture
+endif
+
 SUBDIRS = \
 	doc \
 	man \
@@ -39,7 +43,7 @@ SUBDIRS = \
 	$(GLX_DIR) \
 	exa \
 	config \
-	gesture \
+	$(GESTURE_DIR) \
 	hw \
 	test
 
