@@ -1,3 +1,5 @@
+%bcond_with mesa
+
 Name:           xorg-server
 Version:        1.13.3
 Release:        1
@@ -41,10 +43,15 @@ BuildRequires:  pkgconfig(xorg-macros)
 BuildRequires:  pkgconfig(xproto)
 BuildRequires:  pkgconfig(xtrans)
 BuildRequires:  pkgconfig(xv)
-BuildRequires:  pkgconfig(gl)
 BuildRequires:  pkgconfig(glproto)
 BuildRequires:  pkgconfig(xf86driproto)
+%if %{with mesa}
 BuildRequires:  pkgconfig(dri)
+BuildRequires:  pkgconfig(gl)
+%else
+BuildRequires: pkgconfig(gles20)
+%endif
+
 Provides:	xorg-x11-server
 Obsoletes:	xorg-x11-server < 1.13.0
 Provides:	xorg-x11-server-common
@@ -75,6 +82,7 @@ drivers, input drivers, or other X modules should install this package.
 %build
 ./autogen.sh
 %reconfigure \
+%if %{with mesa}
 %ifarch %ix86 x86_64
           --enable-dri \
           --enable-dri2 \
@@ -85,6 +93,17 @@ drivers, input drivers, or other X modules should install this package.
 	  --disable-dri \
 	--disable-glx \
 	  --enable-dri2 \
+	--disable-aiglx \
+	--disable-glx-tls \
+	--disable-vgahw \
+	--disable-vbe \
+	--disable-dga \
+	--disable-xaa \
+%endif
+%else
+	--disable-dri \
+	--disable-glx \
+	--enable-dri2 \
 	--disable-aiglx \
 	--disable-glx-tls \
 	--disable-vgahw \
@@ -183,8 +202,10 @@ rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 %{_bindir}/cvt
 %dir %{_libdir}/xorg
 %dir %{_libdir}/xorg/modules
+%if %{with mesa}
 %dir %{_libdir}/xorg/modules/extensions
 %{_libdir}/xorg/modules/extensions/*.so
+%endif
 %dir %{_libdir}/xorg/modules/multimedia
 %{_libdir}/xorg/modules/multimedia/*.so
 %{_libdir}/xorg/modules/*.so
