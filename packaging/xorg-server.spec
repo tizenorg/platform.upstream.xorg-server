@@ -8,6 +8,7 @@ Summary:        X Server
 Url:            http://www.x.org
 Group:          Graphics/X Window System
 Source0:        %{name}-%{version}.tar.bz2
+Source1001: 	xorg-server.manifest
 BuildRequires:  libgcrypt-devel
 BuildRequires:  pkgconfig(gestureproto)
 BuildRequires:  pkgconfig(xf86dgaproto)
@@ -77,6 +78,7 @@ drivers, input drivers, or other X modules should install this package.
 
 %prep
 %setup -q
+cp %{SOURCE1001} .
 
 
 %build
@@ -193,6 +195,7 @@ rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 %remove_docs
 
 %files
+%manifest %{name}.manifest
 %defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/xorg/protocol.txt
@@ -211,6 +214,7 @@ rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 %{_libdir}/xorg/modules/*.so
 
 %files devel
+%manifest %{name}.manifest
 %defattr(-,root,root,-)
 %{_libdir}/pkgconfig/xorg-server.pc
 %dir %{_includedir}/xorg
