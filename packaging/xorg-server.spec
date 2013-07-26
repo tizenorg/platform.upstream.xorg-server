@@ -200,7 +200,7 @@ rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 %license COPYING
 %{_libdir}/xorg/protocol.txt
 %{_bindir}/X
-%{_bindir}/Xorg
+%attr(4755, root, root) %{_bindir}/Xorg
 %{_bindir}/gtf
 %{_bindir}/cvt
 %dir %{_libdir}/xorg
