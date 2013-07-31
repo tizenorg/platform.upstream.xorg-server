@@ -2,7 +2,7 @@
 
 Name:           xorg-server
 Version:        1.13.3
-Release:        1
+Release:        2
 License:        MIT
 Summary:        X Server
 Url:            http://www.x.org
@@ -75,6 +75,19 @@ The SDK package provides the developmental files which are necessary for
 developing X server driver modules, and for compiling driver modules
 outside of the standard X11 source code tree.  Developers writing video
 drivers, input drivers, or other X modules should install this package.
+
+%package setuid
+Summary:        Setuid X server
+Group:          Graphics/X Window System
+Provides:       xorg-x11-server
+Obsoletes:      xorg-x11-server < 1.13.0
+Provides:       xorg-x11-server-common
+Obsoletes:      xorg-x11-server-common < 1.13.0
+Provides:       xorg-x11-server-Xorg
+Obsoletes:      xorg-x11-server-Xorg < 1.13.0
+
+%description setuid
+The setuid version of X server.
 
 %prep
 %setup -q
@@ -201,6 +214,28 @@ rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 %{_libdir}/xorg/protocol.txt
 %{_bindir}/X
 %{_bindir}/Xorg
+%{_bindir}/gtf
+%{_bindir}/cvt
+%dir %{_libdir}/xorg
+%dir %{_libdir}/xorg/modules
+%if %{with mesa}
+%dir %{_libdir}/xorg/modules/extensions
+%{_libdir}/xorg/modules/extensions/*.so
+%endif
+%dir %{_libdir}/xorg/modules/multimedia
+%{_libdir}/xorg/modules/multimedia/*.so
+%{_libdir}/xorg/modules/*.so
+
+%files setuid
+%manifest %{name}.manifest
+%defattr(-,root,root,-)
+%license COPYING
+%{_libdir}/xorg/protocol.txt
+%{_bindir}/X
+# Is there a way to list subpackage files and the package
+# files in a single %files directive?
+# only a single difference here
+%attr(4755,root,root) %{_bindir}/Xorg
 %{_bindir}/gtf
 %{_bindir}/cvt
 %dir %{_libdir}/xorg

@@ -1,3 +1,6 @@
+* Wed Jul 31 2013 Chengwei Yang <chengwei.yang@intel.com>
+- Create a subpackage for setuid version of X
+
 * Thu Jun 27 2013 Junfeng Dong <junfeng.dong@intel.com>
 - Configure for mobile.
 
