@@ -2,7 +2,7 @@
 
 Name:           xorg-server
 Version:        1.13.3
-Release:        2
+Release:        1
 License:        MIT
 Summary:        X Server
 Url:            http://www.x.org
@@ -59,6 +59,7 @@ Provides:	xorg-x11-server-common
 Obsoletes:	xorg-x11-server-common < 1.13.0
 Provides:	xorg-x11-server-Xorg
 Obsoletes:	xorg-x11-server-Xorg < 1.13.0
+Conflicts:	xorg-server-setuid
 
 %description
 X.org X Server
@@ -85,6 +86,7 @@ Provides:       xorg-x11-server-common
 Obsoletes:      xorg-x11-server-common < 1.13.0
 Provides:       xorg-x11-server-Xorg
 Obsoletes:      xorg-x11-server-Xorg < 1.13.0
+Conflicts:      xorg-server
 
 %description setuid
 The setuid version of X server.
