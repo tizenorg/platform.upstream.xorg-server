@@ -148,7 +148,6 @@ cp %{SOURCE1001} .
 	--disable-windowswm \
 	--enable-libdrm \
 	--enable-xorg \
-	--enable-xkb-cache \
 	--disable-dmx \
 	--disable-xvfb \
 	--disable-xnest \
