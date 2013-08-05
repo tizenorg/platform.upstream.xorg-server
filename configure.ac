@@ -521,9 +521,6 @@ AC_ARG_WITH(xkb-path,         AS_HELP_STRING([--with-xkb-path=PATH], [Path to XK
 AC_ARG_WITH(xkb-output,       AS_HELP_STRING([--with-xkb-output=PATH], [Path to XKB output dir (default: ${datadir}/X11/xkb/compiled)]),
 				[ XKBOUTPUT="$withval" ],
 				[ XKBOUTPUT="compiled" ])
-AC_ARG_ENABLE(xkb-cache,	AS_HELP_STRING([--enable-xkb-cache],
-					       [Cache xkbcomp output when possible (default: disabled)]),
-					       [XKBCACHE=$enableval], [XKBCACHE=no])
 AC_ARG_WITH(default-xkb-rules, AS_HELP_STRING([--with-default-xkb-rules=RULES],
                                    [Keyboard ruleset (default: base/evdev)]),
                                 [ XKB_DFLT_RULES="$withval" ],
@@ -1240,11 +1237,6 @@ dnl Make sure XKM_OUTPUT_DIR is an absolute path
 XKBOUTPUT_FIRSTCHAR=`echo $XKBOUTPUT | cut -b 1`
 if [[ x$XKBOUTPUT_FIRSTCHAR != x/ -a x$XKBOUTPUT_FIRSTCHAR != 'x$' ]] ; then
    XKBOUTPUT="$XKB_BASE_DIRECTORY/$XKBOUTPUT"
-fi
-
-echo "XKBCACHE is $XKBCACHE"
-if test "x$XKBCACHE" = xyes; then
-	AC_DEFINE(XKM_CACHE_FILES, 1, [Cache xkbcomp output files])
 fi
 
 dnl XKM_OUTPUT_DIR (used in code) must end in / or file names get hosed
