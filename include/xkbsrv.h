@@ -858,8 +858,12 @@ extern _X_EXPORT unsigned int XkbDDXLoadKeymapByNames(DeviceIntPtr /* keybd */ ,
                                                       /* names */ ,
                                                       unsigned int /* want */ ,
                                                       unsigned int /* need */ ,
-                                                      XkbDescPtr *xkbRtrn,
-                                                      char *path_name);
+                                                      XkbDescPtr *
+                                                      /* finfoRtrn */ ,
+                                                      char *
+                                                      /* keymapNameRtrn */ ,
+                                                      int       /* keymapNameRtrnLen */
+    );
 
 extern _X_EXPORT Bool XkbDDXNamesFromRules(DeviceIntPtr /* keybd */ ,
                                            char * /* rules */ ,
