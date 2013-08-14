@@ -1,3 +1,6 @@
+* Wed Aug 14 2013 Michael I Doherty <michael.i.doherty@intel.com> submit/tizen/20130811.132529@fa636d2
+- XKB: cache xkbcomp output for fast start-up v9 for 1.13.3
+
 * Wed Jul 31 2013 Chengwei Yang <chengwei.yang@intel.com>
 - Create a subpackage for setuid version of X
 
