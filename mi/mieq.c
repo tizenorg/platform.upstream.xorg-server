@@ -630,9 +630,14 @@ mieqProcessInputEvents(void)
 #ifdef DPMSExtension
         else if (DPMSPowerLevel != DPMSModeOn)
             SetScreenSaverTimer();
-
+#ifdef _F_DPMS_PHONE_CTRL_
+        if (!DPMSPhoneCrtl)
+            if (DPMSPowerLevel != DPMSModeOn)
+                DPMSSet(serverClient, DPMSModeOn);
+#else
         if (DPMSPowerLevel != DPMSModeOn)
             DPMSSet(serverClient, DPMSModeOn);
+#endif
 #endif
 
         mieqProcessDeviceEvent(dev, &event, screen);

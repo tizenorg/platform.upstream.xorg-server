@@ -433,8 +433,14 @@ xf86VTSwitch(void)
         DebugF("xf86VTSwitch: Leaving, xf86Exiting is %s\n",
                BOOLTOSTRING((dispatchException & DE_TERMINATE) ? TRUE : FALSE));
 #ifdef DPMSExtension
+#ifdef _F_DPMS_PHONE_CTRL_
+        if (!DPMSPhoneCrtl)
+            if (DPMSPowerLevel != DPMSModeOn)
+                DPMSSet(serverClient, DPMSModeOn);
+#else
         if (DPMSPowerLevel != DPMSModeOn)
             DPMSSet(serverClient, DPMSModeOn);
+#endif
 #endif
         for (i = 0; i < xf86NumScreens; i++) {
             if (!(dispatchException & DE_TERMINATE))

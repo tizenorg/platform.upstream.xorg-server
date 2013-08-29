@@ -488,6 +488,9 @@ UseMsg(void)
     ErrorF("-dpi int               screen resolution in dots per inch\n");
 #ifdef DPMSExtension
     ErrorF("-dpms                  disables VESA DPMS monitor control\n");
+#ifdef _F_DPMS_PHONE_CTRL_
+    ErrorF("+dpmsphone             enable VESA DPMS monitor control for phone\n");
+#endif
 #endif
     ErrorF
         ("-deferglyphs [none|all|16] defer loading of [no|all|16-bit] glyphs\n");
@@ -677,6 +680,10 @@ ProcessCommandLine(int argc, char *argv[])
             /* ignored for compatibility */ ;
         else if (strcmp(argv[i], "-dpms") == 0)
             DPMSDisabledSwitch = TRUE;
+#ifdef _F_DPMS_PHONE_CTRL_
+        else if (strcmp(argv[i], "+dpmsphone") == 0)
+            DPMSPhoneCrtl = TRUE;
+#endif
 #endif
         else if (strcmp(argv[i], "-deferglyphs") == 0) {
             if (++i >= argc || !ParseGlyphCachingMode(argv[i]))

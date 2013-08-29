@@ -96,6 +96,9 @@ int ScreenSaverAllowExposures;
 #ifdef DPMSExtension
 CARD16 DPMSPowerLevel = 0;
 Bool DPMSDisabledSwitch = FALSE;
+#ifdef _F_DPMS_PHONE_CTRL_
+Bool DPMSPhoneCrtl = FALSE;
+#endif
 Bool DPMSCapableFlag = FALSE;
 CARD32 DPMSStandbyTime;
 CARD32 DPMSSuspendTime;
