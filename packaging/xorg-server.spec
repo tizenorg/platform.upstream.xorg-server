@@ -198,6 +198,7 @@ cp %{SOURCE1001} .
 		-D_F_GESTURE_EXTENSION_ \
                 -D_F_DISABLE_SCALE_TO_DESKTOP_FOR_DIRECT_TOUCH_ \
                 -D_F_DPMS_PHONE_CTRL_ \
+                -D_F_NOT_USE_SW_CURSOR_ \
  		" \
 	CPPFLAGS="${CPPFLAGS} "
 

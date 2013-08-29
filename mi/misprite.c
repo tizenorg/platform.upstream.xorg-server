@@ -731,6 +731,10 @@ miSpriteSetCursor(DeviceIntPtr pDev, ScreenPtr pScreen,
     miCursorInfoPtr pPointer;
     miSpriteScreenPtr pScreenPriv;
 
+#ifdef _F_NOT_USE_SW_CURSOR_
+    return;
+#endif
+
     if (IsFloating(pDev))
         return;
 
