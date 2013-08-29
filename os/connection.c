@@ -168,7 +168,11 @@ int *ConnectionTranslation = NULL;
 #undef MAXSOCKS
 #define MAXSOCKS 500
 #undef MAXSELECT
+#ifdef _F_EXCLUDE_NON_MASK_SELECTED_FD_FROM_MAXCLIENTS_
+#define MAXSELECT 1024
+#else
 #define MAXSELECT 500
+#endif
 
 struct _ct_node {
     struct _ct_node *next;
@@ -294,6 +298,7 @@ InitConnectionLimits(void)
 
 #endif                          /* __CYGWIN__ */
 
+#ifndef _F_EXCLUDE_NON_MASK_SELECTED_FD_FROM_MAXCLIENTS_
     /* This is the fallback */
     if (lastfdesc < 0)
         lastfdesc = MAXSOCKS;
@@ -307,6 +312,10 @@ InitConnectionLimits(void)
             ErrorF("REACHED MAXIMUM CLIENTS LIMIT %d\n", MAXCLIENTS);
     }
     MaxClients = lastfdesc;
+#else
+    lastfdesc = MAXSELECT;
+    MaxClients = MAXCLIENTS;
+#endif
 
 #ifdef DEBUG
     ErrorF("InitConnectionLimits: MaxClients = %d\n", MaxClients);
@@ -395,7 +404,11 @@ CreateWellKnownSockets(void)
     FD_ZERO(&ClientsWithInput);
 
 #if !defined(WIN32)
+#ifndef _F_EXCLUDE_NON_MASK_SELECTED_FD_FROM_MAXCLIENTS_
     for (i = 0; i < MaxClients; i++)
+#else
+    for (i = 0; i < lastfdesc; i++)
+#endif
         ConnectionTranslation[i] = 0;
 #else
     ClearConnectionTranslation();
