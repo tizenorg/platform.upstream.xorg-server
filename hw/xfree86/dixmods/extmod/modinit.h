@@ -63,6 +63,11 @@ extern void SELinuxExtensionInit(void);
 #include "xselinux.h"
 #endif
 
+#ifdef XSMACK
+extern void SmackExtensionInit(INITARGS);
+#include "xsmack.h"
+#endif
+
 #ifdef XEVIE
 extern void XevieExtensionInit(void);
 #endif

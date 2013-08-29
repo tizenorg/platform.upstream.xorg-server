@@ -179,6 +179,9 @@ static ExtensionToggle ExtensionToggleList[] = {
 #ifdef XSELINUX
     {"SELinux", &noSELinuxExtension},
 #endif
+#ifdef XSMACK
+    {"Smack", &noSmackExtension},
+#endif
     {"XTEST", &noTestExtensions},
 #ifdef XV
     {"XVideo", &noXvExtension},
@@ -304,6 +307,9 @@ static ExtensionModule staticExtensions[] = {
 #endif
 #ifdef XSELINUX
     {SELinuxExtensionInit, SELINUX_EXTENSION_NAME, &noSELinuxExtension},
+#endif
+#ifdef XSMACK
+    {SmackExtensionInit, SMACK_EXTENSION_NAME, &noSmackExtension},
 #endif
 };
 

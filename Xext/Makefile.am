@@ -73,6 +73,14 @@ BUILTIN_SRCS += $(XSELINUX_SRCS)
 BUILTIN_LIBS += $(SELINUX_LIBS)
 endif
 
+# Smack extension: provides Smack policy support for X objects
+# requires X-ACE extension
+XSMACK_SRCS = xsmack.c xsmack.h
+if XSMACK
+BUILTIN_SRCS += $(XSMACK_SRCS)
+BUILTIN_LIBS += $(SMACK_LIBS)
+endif
+
 # Security extension: multi-level security to protect clients from each other
 XCSECURITY_SRCS = security.c securitysrv.h
 if XCSECURITY   
@@ -104,6 +112,7 @@ EXTRA_DIST = \
 	$(XACE_SRCS) \
 	$(XCSECURITY_SRCS) \
 	$(XSELINUX_SRCS) \
+	$(XSMACK_SRCS) \
 	$(XINERAMA_SRCS) \
 	$(BIGFONT_SRCS) \
 	$(DPMS_SRCS) \

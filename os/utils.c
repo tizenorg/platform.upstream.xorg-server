@@ -179,6 +179,9 @@ Bool noPanoramiXExtension = TRUE;
 Bool noSELinuxExtension = FALSE;
 int selinuxEnforcingState = SELINUX_MODE_DEFAULT;
 #endif
+#ifdef XSMACK
+Bool noSmackExtension = FALSE;
+#endif
 #ifdef XV
 Bool noXvExtension = FALSE;
 #endif

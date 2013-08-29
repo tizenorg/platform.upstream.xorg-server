@@ -163,6 +163,12 @@ extern _X_EXPORT Bool noSELinuxExtension;
 extern void SELinuxExtensionInit(void);
 #endif
 
+#if defined(XSMACK)
+#include "xsmack.h"
+extern _X_EXPORT Bool noSmackExtension;
+extern void SmackExtensionInit(void);
+#endif
+
 #ifdef XTEST
 #include <X11/extensions/xtestconst.h>
 #include <X11/extensions/xtestproto.h>

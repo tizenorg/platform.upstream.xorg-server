@@ -303,6 +303,9 @@
 /* Build SELinux extension */
 #undef XSELINUX
 
+/* Build Smack extension */
+#undef XSMACK
+
 /* Support XCMisc extension */
 #undef XCMISC
 

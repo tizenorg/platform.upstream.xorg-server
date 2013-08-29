@@ -612,6 +612,7 @@ AC_ARG_ENABLE(xinerama,	      AS_HELP_STRING([--disable-xinerama], [Build Xinera
 AC_ARG_ENABLE(xf86vidmode,    AS_HELP_STRING([--disable-xf86vidmode], [Build XF86VidMode extension (default: auto)]), [XF86VIDMODE=$enableval], [XF86VIDMODE=auto])
 AC_ARG_ENABLE(xace,           AS_HELP_STRING([--disable-xace], [Build X-ACE extension (default: enabled)]), [XACE=$enableval], [XACE=yes])
 AC_ARG_ENABLE(xselinux,       AS_HELP_STRING([--enable-xselinux], [Build SELinux extension (default: disabled)]), [XSELINUX=$enableval], [XSELINUX=no])
+AC_ARG_ENABLE(xsmack,         AS_HELP_STRING([--enable-xsmack], [Build SMACK extension (default: disabled)]), [XSMACK=$enableval], [XSMACK=no])
 AC_ARG_ENABLE(xcsecurity,     AS_HELP_STRING([--enable-xcsecurity], [Build Security extension (default: disabled)]), [XCSECURITY=$enableval], [XCSECURITY=no])
 AC_ARG_ENABLE(tslib,          AS_HELP_STRING([--enable-tslib], [Build kdrive tslib touchscreen support (default: disabled)]), [TSLIB=$enableval], [TSLIB=no])
 AC_ARG_ENABLE(dbe,            AS_HELP_STRING([--disable-dbe], [Build DBE extension (default: enabled)]), [DBE=$enableval], [DBE=yes])
@@ -1167,6 +1168,15 @@ if test "x$XSELINUX" = xyes; then
 	PKG_CHECK_MODULES([SELINUX], $LIBSELINUX)
 	SELINUX_LIBS="$SELINUX_LIBS -laudit"
 	AC_DEFINE(XSELINUX, 1, [Build SELinux extension])
+fi
+
+AM_CONDITIONAL(XSMACK, [test "x$XSMACK" = xyes])
+if test "x$XSMACK" = xyes; then
+	if test "x$XACE" != xyes; then
+		AC_MSG_ERROR([cannot build Smack extension without X-ACE])
+	fi
+	SMACK_LIBS="$SMACK_LIBS -lsmack"
+	AC_DEFINE(XSMACK, 1, [Build Smack extension])
 fi
 
 AM_CONDITIONAL(XCSECURITY, [test "x$XCSECURITY" = xyes])
