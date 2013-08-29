@@ -186,18 +186,20 @@ cp %{SOURCE1001} .
 	--disable-install-setuid \
 	--with-sha1=libgcrypt \
 	CFLAGS="${CFLAGS} \
-		-Wall -g \
-		-D_F_UDEV_DEBUG_ \
-		-D_F_NO_GRABTIME_UPDATE_ \
-		-D_F_NO_CATCH_SIGNAL_ \
-		-D_F_CHECK_NULL_CLIENT_ \
-		-D_F_COMP_OVL_PATCH \
-		-D_F_PUT_ON_PIXMAP_ \
-		-D_F_IGNORE_MOVE_SPRITE_FOR_FLOATING_POINTER_ \
+                -Wall -g \
+                -D_F_UDEV_DEBUG_ \
+                -D_F_NO_GRABTIME_UPDATE_ \
+                -D_F_NO_CATCH_SIGNAL_ \
+                -D_F_CHECK_NULL_CLIENT_ \
+                -D_F_COMP_OVL_PATCH \
+                -D_F_PUT_ON_PIXMAP_ \
+                -D_F_IGNORE_MOVE_SPRITE_FOR_FLOATING_POINTER_ \
                 -D_F_NOT_ALWAYS_CREATE_FRONTBUFFER_ \
-		-D_F_GESTURE_EXTENSION_ \
+                -D_F_GESTURE_EXTENSION_ \
                 -D_F_DISABLE_SCALE_TO_DESKTOP_FOR_DIRECT_TOUCH_ \
                 -D_F_DPMS_PHONE_CTRL_ \
+                -D_F_DRI2_FIX_INVALIDATE \
+                -D_F_DRI2_SWAP_REGION_ \
                 -D_F_NOT_USE_SW_CURSOR_ \
                 -D_F_EXCLUDE_NON_MASK_SELECTED_FD_FROM_MAXCLIENTS_ \
  		" \

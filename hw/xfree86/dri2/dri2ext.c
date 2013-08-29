@@ -422,6 +422,48 @@ ProcDRI2SwapBuffers(ClientPtr client)
     return Success;
 }
 
+#ifdef _F_DRI2_SWAP_REGION_
+static int
+ProcDRI2SwapBuffersWithRegion(ClientPtr client)
+{
+    REQUEST(xDRI2SwapBuffersWithRegionReq);
+    xDRI2SwapBuffersReply rep = {
+        .type = X_Reply,
+        .sequenceNumber = client->sequence,
+        .length = 0
+    };
+    DrawablePtr pDrawable;
+    CARD64 swap_target;
+    int status;
+    RegionPtr pRegion;
+
+    REQUEST_SIZE_MATCH(xDRI2SwapBuffersWithRegionReq);
+    VERIFY_REGION(pRegion, stuff->region, client, DixReadAccess);
+
+    if (!validDrawable(client, stuff->drawable,
+                       DixReadAccess | DixWriteAccess, &pDrawable, &status))
+        return status;
+
+    /*
+     * Ensures an out of control client can't exhaust our swap queue, and
+     * also orders swaps.
+     */
+    if (DRI2ThrottleClient(client, pDrawable))
+        return Success;
+
+    status = DRI2SwapBuffersWithRegion(client, pDrawable, 0, 0, 0,
+                             &swap_target, DRI2SwapEvent, pDrawable, pRegion);
+    if (status != Success)
+        return BadDrawable;
+
+    load_swap_reply(&rep, swap_target);
+
+    WriteToClient(client, sizeof(xDRI2SwapBuffersReply), &rep);
+
+    return Success;
+}
+#endif
+
 static void
 load_msc_reply(xDRI2MSCReply * rep, CARD64 ust, CARD64 msc, CARD64 sbc)
 {
@@ -618,6 +660,10 @@ ProcDRI2Dispatch(ClientPtr client)
         return ProcDRI2SwapInterval(client);
     case X_DRI2GetParam:
         return ProcDRI2GetParam(client);
+#ifdef _F_DRI2_SWAP_REGION_
+    case X_DRI2SwapBuffersWithRegion:
+        return ProcDRI2SwapBuffersWithRegion(client);
+#endif
     default:
         return BadRequest;
     }

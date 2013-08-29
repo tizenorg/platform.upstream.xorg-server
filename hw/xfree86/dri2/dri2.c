@@ -134,6 +134,11 @@ typedef struct _DRI2Screen {
     DRI2CreateBuffer2ProcPtr CreateBuffer2;
     DRI2DestroyBuffer2ProcPtr DestroyBuffer2;
     DRI2CopyRegion2ProcPtr CopyRegion2;
+
+#ifdef _F_DRI2_SWAP_REGION_
+    /* add in for Tizen extension */
+    DRI2ScheduleSwapWithRegionProcPtr ScheduleSwapWithRegion;
+#endif    
 } DRI2ScreenRec;
 
 static void
@@ -302,6 +307,21 @@ DRI2LookupDrawableRef(DRI2DrawablePtr pPriv, XID id)
     return NULL;
 }
 
+#ifdef _F_DRI2_FIX_INVALIDATE
+static DRI2DrawableRefPtr
+DRI2LookupDrawableRefByClient(DRI2DrawablePtr pPriv, XID id, ClientPtr client)
+{
+    DRI2DrawableRefPtr ref;
+
+    xorg_list_for_each_entry(ref, &pPriv->reference_list, link) {
+        if ((ref->id == id) && (client->index == CLIENT_ID(ref->dri2_id)))
+            return ref;
+    }
+
+    return NULL;
+}
+#endif
+
 static int
 DRI2AddDrawableRef(DRI2DrawablePtr pPriv, XID id, XID dri2_id,
                    DRI2InvalidateProcPtr invalidate, void *priv)
@@ -347,6 +367,10 @@ DRI2CreateDrawable2(ClientPtr client, DrawablePtr pDraw, XID id,
         pPriv = DRI2AllocateDrawable(pDraw);
     if (pPriv == NULL)
         return BadAlloc;
+#ifdef _F_DRI2_FIX_INVALIDATE
+    if (DRI2LookupDrawableRefByClient(pPriv, id, client))
+        return Success;
+#endif
 
     pPriv->prime_id = dri2_client->prime_id;
 
@@ -1090,13 +1114,156 @@ DRI2WaitSwap(ClientPtr client, DrawablePtr pDrawable)
     return FALSE;
 }
 
+#ifdef _F_DRI2_SWAP_REGION_
+int
+DRI2SwapBuffersWithRegion(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
+                CARD64 divisor, CARD64 remainder, CARD64 * swap_target,
+                DRI2SwapEventPtr func, void *data, RegionPtr pRegion)
+{
+    ScreenPtr pScreen = pDraw->pScreen;
+    DRI2ScreenPtr ds = DRI2GetScreen(pDraw->pScreen);
+    DRI2DrawablePtr pPriv;
+    DRI2BufferPtr pDestBuffer = NULL, pSrcBuffer = NULL;
+    int ret, i;
+    CARD64 ust, current_msc;
 
+    pPriv = DRI2GetDrawable(pDraw);
+    if (pPriv == NULL) {
+        xf86DrvMsg(pScreen->myNum, X_ERROR,
+                   "[DRI2] %s: bad drawable\n", __func__);
+        return BadDrawable;
+    }
+
+    for (i = 0; i < pPriv->bufferCount; i++) {
+        if (pPriv->buffers[i]->attachment == DRI2BufferFrontLeft)
+            pDestBuffer = (DRI2BufferPtr) pPriv->buffers[i];
+        if (pPriv->buffers[i]->attachment == DRI2BufferBackLeft)
+            pSrcBuffer = (DRI2BufferPtr) pPriv->buffers[i];
+    }
+    if (pSrcBuffer == NULL || pDestBuffer == NULL) {
+        xf86DrvMsg(pScreen->myNum, X_ERROR,
+                   "[DRI2] %s: drawable has no back or front?\n", __func__);
+        return BadDrawable;
+    }
+
+    /* Old DDX or no swap interval, just blit */
+    if ((!ds->ScheduleSwap && !ds->ScheduleSwapWithRegion) ||
+        !pPriv->swap_interval ||
+        pPriv->prime_id) {
+
+        RegionRec region;
+
+        if (!pRegion) {
+            BoxRec box;
+
+            box.x1 = 0;
+            box.y1 = 0;
+            box.x2 = pDraw->width;
+            box.y2 = pDraw->height;
+            RegionInit(&region, &box, 0);
+            pRegion = &region;
+        }
+
+        pPriv->swapsPending++;
+
+        dri2_copy_region(pDraw, pRegion, pDestBuffer, pSrcBuffer);
+        DRI2SwapComplete(client, pDraw, target_msc, 0, 0, DRI2_BLIT_COMPLETE,
+                         func, data);
+
+        return Success;
+    }
+
+    /*
+     * In the simple glXSwapBuffers case, all params will be 0, and we just
+     * need to schedule a swap for the last swap target + the swap interval.
+     */
+    if (target_msc == 0 && divisor == 0 && remainder == 0) {
+        /* If the current vblank count of the drawable's crtc is lower
+         * than the count stored in last_swap_target from a previous swap
+         * then reinitialize last_swap_target to the current crtc's msc,
+         * otherwise the swap will hang. This will happen if the drawable
+         * is moved to a crtc with a lower refresh rate, or a crtc that just
+         * got enabled.
+         */
+        if (ds->GetMSC) {
+            if (!(*ds->GetMSC) (pDraw, &ust, &current_msc))
+                pPriv->last_swap_target = 0;
+
+            if (current_msc < pPriv->last_swap_target)
+                pPriv->last_swap_target = current_msc;
+
+        }
+
+        /*
+         * Swap target for this swap is last swap target + swap interval since
+         * we have to account for the current swap count, interval, and the
+         * number of pending swaps.
+         */
+        *swap_target = pPriv->last_swap_target + pPriv->swap_interval;
+
+    }
+    else {
+        /* glXSwapBuffersMscOML could have a 0 target_msc, honor it */
+        *swap_target = target_msc;
+    }
+
+    pPriv->swapsPending++;
+    if(ds->ScheduleSwapWithRegion) {
+        RegionRec region;
+        BoxRec box;
+
+        if (pRegion == NULL)  {
+            box.x1 = pDraw->x;
+            box.y1 = pDraw->y;
+            box.x2 = box.x1 + pDraw->width;
+            box.y2 = box.y1 + pDraw->height;
+            RegionInit(&region, &box, 0);
+            pRegion = &region;
+            ret = (*ds->ScheduleSwapWithRegion) (client, pDraw, pDestBuffer, pSrcBuffer,
+                                       swap_target, divisor, remainder, func, data, pRegion);
+        } else {
+            /* The region is relative to the drawable origin, so translate it out to
+            * screen coordinates like damage expects.
+            */
+            RegionTranslate(pRegion, pDraw->x, pDraw->y);
+            ret = (*ds->ScheduleSwapWithRegion) (client, pDraw, pDestBuffer, pSrcBuffer,
+                                       swap_target, divisor, remainder, func, data, pRegion);
+            RegionTranslate(pRegion, -pDraw->x, -pDraw->y);
+        }
+    } else
+        ret = (*ds->ScheduleSwap) (client, pDraw, pDestBuffer, pSrcBuffer,
+                                   swap_target, divisor, remainder, func, data);
+
+    if (!ret) {
+        pPriv->swapsPending--;  /* didn't schedule */
+        xf86DrvMsg(pScreen->myNum, X_ERROR,
+                   "[DRI2] %s: driver failed to schedule swap\n", __func__);
+        return BadDrawable;
+    }
+
+    pPriv->last_swap_target = *swap_target;
+
+    /* According to spec, return expected swapbuffers count SBC after this swap
+     * will complete.
+     */
+    *swap_target = pPriv->swap_count + pPriv->swapsPending;
+
+    DRI2InvalidateDrawableAll(pDraw);
+
+    return Success;
+}
+#endif
 
 int
 DRI2SwapBuffers(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
                 CARD64 divisor, CARD64 remainder, CARD64 * swap_target,
                 DRI2SwapEventPtr func, void *data)
 {
+#ifdef _F_DRI2_SWAP_REGION_
+    return DRI2SwapBuffersWithRegion(client, pDraw,
+                                    target_msc, divisor, remainder, swap_target,
+                                    func, data, NULL);
+#else
     ScreenPtr pScreen = pDraw->pScreen;
     DRI2ScreenPtr ds = DRI2GetScreen(pDraw->pScreen);
     DRI2DrawablePtr pPriv;
@@ -1196,6 +1363,7 @@ DRI2SwapBuffers(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
     DRI2InvalidateDrawableAll(pDraw);
 
     return Success;
+#endif    
 }
 
 void
@@ -1249,6 +1417,32 @@ DRI2GetMSC(DrawablePtr pDraw, CARD64 * ust, CARD64 * msc, CARD64 * sbc)
 
     return Success;
 }
+
+#ifdef _F_DRI2_SWAP_REGION_
+int
+DRI2GetSBC(DrawablePtr pDraw, CARD64 * sbc, unsigned int* swaps_pending)
+{
+    ScreenPtr pScreen = pDraw->pScreen;
+    DRI2DrawablePtr pPriv;
+
+    pPriv = DRI2GetDrawable(pDraw);
+    if (pPriv == NULL) {
+        xf86DrvMsg(pScreen->myNum, X_ERROR,
+                   "[DRI2] %s: bad drawable\n", __func__);
+        return BadDrawable;
+    }
+
+    if (sbc) {
+        *sbc = pPriv->swap_count;
+    }
+
+    if (swaps_pending) {
+        *swaps_pending = pPriv->swapsPending;
+    }
+
+    return Success;
+}
+#endif
 
 int
 DRI2WaitMSC(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
@@ -1313,7 +1507,11 @@ DRI2HasSwapControl(ScreenPtr pScreen)
 {
     DRI2ScreenPtr ds = DRI2GetScreen(pScreen);
 
+#ifdef _F_DRI2_SWAP_REGION_
+    return (ds->ScheduleSwap || ds->ScheduleSwapWithRegion) && ds->GetMSC;
+#else
     return ds->ScheduleSwap && ds->GetMSC;
+#endif
 }
 
 Bool
@@ -1506,6 +1704,12 @@ DRI2ScreenInit(ScreenPtr pScreen, DRI2InfoPtr info)
         ds->CopyRegion2 = info->CopyRegion2;
     }
 
+#ifdef _F_DRI2_SWAP_REGION_
+    if (info->version >= 100) {
+        ds->ScheduleSwapWithRegion = info->ScheduleSwapWithRegion;
+        cur_minor = 99;
+    }
+#endif
     /*
      * if the driver doesn't provide an AuthMagic function or the info struct
      * version is too low, call through LegacyAuthMagic

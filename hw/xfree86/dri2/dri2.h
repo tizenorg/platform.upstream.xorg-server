@@ -101,6 +101,16 @@ typedef int (*DRI2ScheduleSwapProcPtr) (ClientPtr client,
                                         CARD64 divisor,
                                         CARD64 remainder,
                                         DRI2SwapEventPtr func, void *data);
+//#ifdef _F_DRI2_SWAP_REGION_
+typedef int (*DRI2ScheduleSwapWithRegionProcPtr) (ClientPtr client,
+                                        DrawablePtr pDraw,
+                                        DRI2BufferPtr pDestBuffer,
+                                        DRI2BufferPtr pSrcBuffer,
+                                        CARD64 * target_msc,
+                                        CARD64 divisor,
+                                        CARD64 remainder,
+                                        DRI2SwapEventPtr func, void *data, RegionPtr pRegion);
+//#endif                                        
 typedef DRI2BufferPtr(*DRI2CreateBufferProcPtr) (DrawablePtr pDraw,
                                                  unsigned int attachment,
                                                  unsigned int format);
@@ -252,6 +262,11 @@ typedef struct {
     DRI2CreateBuffer2ProcPtr CreateBuffer2;
     DRI2DestroyBuffer2ProcPtr DestroyBuffer2;
     DRI2CopyRegion2ProcPtr CopyRegion2;
+
+//#ifdef _F_DRI2_SWAP_REGION_
+    /* add in for Tizen extension */
+    DRI2ScheduleSwapWithRegionProcPtr ScheduleSwapWithRegion;
+//#endif    
 } DRI2InfoRec, *DRI2InfoPtr;
 
 extern _X_EXPORT Bool DRI2ScreenInit(ScreenPtr pScreen, DRI2InfoPtr info);
@@ -323,6 +338,12 @@ extern _X_EXPORT int DRI2SwapBuffers(ClientPtr client, DrawablePtr pDrawable,
                                      CARD64 target_msc, CARD64 divisor,
                                      CARD64 remainder, CARD64 * swap_target,
                                      DRI2SwapEventPtr func, void *data);
+//#ifdef _F_DRI2_SWAP_REGION_
+extern _X_EXPORT int DRI2SwapBuffersWithRegion(ClientPtr client, DrawablePtr pDrawable,
+                                     CARD64 target_msc, CARD64 divisor,
+                                     CARD64 remainder, CARD64 * swap_target,
+                                     DRI2SwapEventPtr func, void *data, RegionPtr pRegion);
+//#endif                                     
 extern _X_EXPORT Bool DRI2WaitSwap(ClientPtr client, DrawablePtr pDrawable);
 
 extern _X_EXPORT int DRI2GetMSC(DrawablePtr pDrawable, CARD64 * ust,
@@ -359,4 +380,7 @@ extern _X_EXPORT int DRI2GetParam(ClientPtr client,
                                   CARD64 *value);
 
 extern _X_EXPORT DrawablePtr DRI2UpdatePrime(DrawablePtr pDraw, DRI2BufferPtr pDest);
+//#ifdef _F_DRI2_SWAP_REGION_
+extern _X_EXPORT int DRI2GetSBC(DrawablePtr pDraw, CARD64 * sbc, unsigned int* swaps_pending);
+//#endif
 #endif
