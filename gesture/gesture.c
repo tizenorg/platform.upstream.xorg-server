@@ -44,6 +44,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "gestureext.h"
 #include "protocol-versions.h"
 #include "inputstr.h"
+#include "list.h"
 
 //#define __DEBUG_GESTURE_EXT__
 
@@ -53,6 +54,11 @@ DevPrivateKeyRec gestureWindowPrivateKeyRec;
 static Mask grabbed_events_mask = 0;
 static int max_num_finger = 0;
 static GestureGrabEventRec grabbed_events[GestureNumberEvents];
+
+static Bool selected_win_exist = 0;
+static struct xorg_list selectedWinList;
+void (*gpGestureEventsGrabbed)(Mask *pGrabMask, GestureGrabEventPtr *pGrabEvent);
+void (*gpGestureEventsSelected)(Window win, Mask *pEventMask);
 
 extern CallbackListPtr ResourceStateCallback;
 
@@ -87,6 +93,9 @@ static void SGestureNotifyTapNHoldEvent(xGestureNotifyTapNHoldEvent *from, xGest
 static void SGestureNotifyHoldEvent(xGestureNotifyHoldEvent *from, xGestureNotifyHoldEvent *to);
 static void SGestureNotifyEvent(xEvent * from, xEvent * to);
 
+static winInfo *GestureAddWindowToList(Window win, struct xorg_list *winlst);
+static int GestureRemoveWindowFromList(Window win, struct xorg_list *winlst);
+
 void GestureExtInit(void)
 {
     GestureExtensionInit();
@@ -117,10 +126,82 @@ GestureExtensionInit(void)
     	 }
 
 	memset(grabbed_events, 0, sizeof(GestureGrabEventRec)*GestureNumberEvents);
+	gpGestureEventsGrabbed = gpGestureEventsSelected = NULL;
+	xorg_list_init(&selectedWinList);
+
 	return TRUE;
     }
 
     return FALSE;
+}
+
+Bool
+GestureRegisterCallbacks(void (*GestureEventsGrabbed)(Mask *pGrabMask, GestureGrabEventPtr *pGrabEvent),
+	void (*GestureEventsSelected)(Window win, Mask *pEventMask))
+{
+	if(GestureEventsGrabbed && gpGestureEventsGrabbed)
+	{
+		ErrorF("[X11][GestureRegisterCallbacks] GestureEventsGrabbed has been registered already !\n");
+		return FALSE;
+	}
+
+	if(GestureEventsSelected && gpGestureEventsSelected)
+	{
+		ErrorF("[X11][GestureRegisterCallbacks] GestureEventsSelected has been registered already !\n");
+		return FALSE;
+	}
+
+	if(GestureEventsGrabbed)
+		gpGestureEventsGrabbed = GestureEventsGrabbed;
+	else
+		gpGestureEventsGrabbed = NULL;
+
+	if(GestureEventsSelected)
+		gpGestureEventsSelected = GestureEventsSelected;
+	else
+		gpGestureEventsSelected = NULL;
+
+	return TRUE;
+}
+
+static winInfo *
+GestureAddWindowToList(Window win, struct xorg_list *winlst)
+{
+	winInfo *wi = NULL;
+
+	wi = malloc(sizeof(winInfo));
+
+	if(!wi)
+	{
+		ErrorF("[X11][GestureAddWindowToList] Failed to allocate memory !\n");
+		return NULL;
+	}
+
+	wi->win = win;
+	xorg_list_add(&wi->lnk, winlst);
+
+	return wi;
+}
+
+static int
+GestureRemoveWindowFromList(Window win, struct xorg_list *winlst)
+{
+	winInfo *wi = NULL, *tmp = NULL;
+
+	if(xorg_list_is_empty(winlst))
+		return 0;
+
+	 xorg_list_for_each_entry_safe (wi, tmp, winlst, lnk)
+	{
+		if(wi->win == win)
+		{
+			xorg_list_del(&wi->lnk);
+			free(wi);
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 /*
@@ -248,6 +329,16 @@ static void GestureResourceStateCallback(CallbackListPtr *pcbl, pointer closure,
 		return;
 	if (rec->state != ResourceStateFreeing)
 		return;
+
+	if(selected_win_exist && gpGestureEventsSelected)
+	{
+		GestureRemoveWindowFromList(pWin->drawable.id, &selectedWinList);
+		selected_win_exist = !xorg_list_is_empty(&selectedWinList);
+
+		if(!selected_win_exist)
+			gpGestureEventsSelected(None, NULL);
+	}
+
 	if( !grabbed_events_mask )
 		return;
 
@@ -659,6 +750,25 @@ ProcGestureSelectEvents (register ClientPtr client)
 	}
     }
 
+    if(stuff->mask)
+    {
+        GestureAddWindowToList(pWin->drawable.id, &selectedWinList);
+    }
+    else
+    {
+        GestureRemoveWindowFromList(pWin->drawable.id, &selectedWinList);
+    }
+
+    if(gpGestureEventsSelected)
+    {
+        selected_win_exist = !xorg_list_is_empty(&selectedWinList);
+
+        if(selected_win_exist)
+		gpGestureEventsSelected(pWin->drawable.id, &stuff->mask);
+	else
+		gpGestureEventsSelected(None, &stuff->mask);
+    }
+
 #ifdef __DEBUG_GESTURE_EXT__
     ErrorF("[X11][ProcGestureSelectEvents] Success !\n");
 #endif//__DEBUG_GESTURE_EXT__
@@ -864,6 +974,11 @@ ProcGestureGrabEvent (register ClientPtr client)
     grabbed_events[stuff->eventType].pGestureGrabWinInfo[stuff->num_finger].pWin = pWin;
     grabbed_events[stuff->eventType].pGestureGrabWinInfo[stuff->num_finger].window = stuff->window;
 
+    if(gpGestureEventsGrabbed)
+    {
+        gpGestureEventsGrabbed(&grabbed_events_mask, &grabbed_events);
+    }
+
 #ifdef __DEBUG_GESTURE_EXT__
     ErrorF("[X11][ProcGestureGrabEvent][after] grabbed_events_mask=0x%x\n", grabbed_events_mask);
 #endif//__DEBUG_GESTURE_EXT__
@@ -1020,6 +1135,11 @@ ProcGestureUngrabEvent (register ClientPtr client)
     	 rep.status = GestureUngrabAbnormal;
 	 ret = BadWindow;
         goto ungrab_failed;
+    }
+
+    if(gpGestureEventsGrabbed)
+    {
+        gpGestureEventsGrabbed(&grabbed_events_mask, &grabbed_events);
     }
 
 #ifdef __DEBUG_GESTURE_EXT__

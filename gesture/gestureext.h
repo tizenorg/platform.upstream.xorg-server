@@ -55,6 +55,11 @@ typedef struct _GestureProcs {
 //fuctions for each request type
 } GestureProcsRec, *GestureProcsPtr;
 
+typedef struct {
+    Window win;
+    struct xorg_list lnk;
+} winInfo;
+
 extern void GestureExtInit(
 	void
 );
@@ -95,6 +100,10 @@ extern _X_EXPORT Bool GestureInstallResourceStateHooks(
 extern _X_EXPORT Bool GestureUninstallResourceStateHooks(
 	void
 );
+
+extern _X_EXPORT Bool GestureRegisterCallbacks(
+	void (*GestureEventsGrabbed)(Mask *pGrabMask, GestureGrabEventPtr *pGrabEvent),
+	void (*GestureEventsSelected)(Window win, Mask *pEventMask));
 
 #endif//_GESTUREEXT_H_
 
