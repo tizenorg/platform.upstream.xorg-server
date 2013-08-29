@@ -917,10 +917,30 @@ scale_to_desktop(DeviceIntPtr dev, ValuatorMask *mask,
         y = dev->last.valuators[1];
 
     /* scale x&y to desktop coordinates */
+#ifdef _F_DISABLE_SCALE_TO_DESKTOP_FOR_DIRECT_TOUCH_
+    AxisInfoPtr x_axis = dev->valuator->axes + 0;
+    AxisInfoPtr y_axis = dev->valuator->axes + 1;
+
+    if((x_axis->max_value > 0) && (y_axis->max_value > 0))
+    {
+	*screenx = rescaleValuatorAxis(x, dev->valuator->axes + 0, NULL,
+				   screenInfo.x, x_axis->max_value);
+	*screeny = rescaleValuatorAxis(y, dev->valuator->axes + 1, NULL,
+				   screenInfo.y, y_axis->max_value);
+    }
+    else
+    {
+	*screenx = rescaleValuatorAxis(x, dev->valuator->axes + 0, NULL,
+				   screenInfo.x, screenInfo.width - 1);
+	*screeny = rescaleValuatorAxis(y, dev->valuator->axes + 1, NULL,
+				   screenInfo.y, screenInfo.height - 1);
+    }
+#else /* #ifdef _F_DISABLE_SCALE_TO_DESKTOP_FOR_DIRECT_TOUCH_ */
     *screenx = rescaleValuatorAxis(x, dev->valuator->axes + 0, NULL,
                                    screenInfo.x, screenInfo.width - 1);
     *screeny = rescaleValuatorAxis(y, dev->valuator->axes + 1, NULL,
                                    screenInfo.y, screenInfo.height - 1);
+#endif /* #ifdef _F_DISABLE_SCALE_TO_DESKTOP_FOR_DIRECT_TOUCH_ */
 
     *devx = x;
     *devy = y;
