@@ -101,7 +101,7 @@ void GestureExtInit(void)
     GestureExtensionInit();
 }
 
-Bool
+void
 GestureExtensionInit(void)
 {
     ExtensionEntry* extEntry;
@@ -122,17 +122,17 @@ GestureExtensionInit(void)
         if (!dixRegisterPrivateKey(&gestureWindowPrivateKeyRec, PRIVATE_WINDOW, 0))
     	 {
     	 	ErrorF("[X11][GestureExtensionInit] Failed to register private key object !\n");
-		return FALSE;
+		return;
     	 }
 
 	memset(grabbed_events, 0, sizeof(GestureGrabEventRec)*GestureNumberEvents);
 	gpGestureEventsGrabbed = gpGestureEventsSelected = NULL;
 	xorg_list_init(&selectedWinList);
 
-	return TRUE;
+	return;
     }
 
-    return FALSE;
+    return;
 }
 
 Bool

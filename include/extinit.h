@@ -115,6 +115,10 @@ extern _X_EXPORT Bool noScreenSaverExtension;
 extern void ScreenSaverExtensionInit(void);
 #endif
 
+#ifdef _F_GESTURE_EXTENSION_
+extern void GestureExtensionInit(void);
+#endif//_F_GESTURE_EXTENSION_
+
 #include <X11/extensions/shapeproto.h>
 extern void ShapeExtensionInit(void);
 

@@ -64,7 +64,7 @@ extern void GestureExtInit(
 	void
 );
 
-extern _X_EXPORT Bool GestureExtensionInit(
+extern _X_EXPORT void GestureExtensionInit(
     void/* GestureProcsPtr procsPtr */
 );
 
