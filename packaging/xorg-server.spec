@@ -180,8 +180,8 @@ cp %{SOURCE1001} .
 	--without-dtrace \
 	--with-extra-module-dir="/usr/lib/xorg/extra-modules" \
 	--with-os-vendor="Tizen" \
-        --with-xkb-path="/usr/share/X11/xkb" \
-        --with-xkb-output="/var/lib/xkb/compiled" \
+        --with-xkb-path="/etc/X11/xkb" \
+        --with-xkb-output="/etc/X11/xkb" \
 	--with-default-font-path="built-ins" \
 	--disable-install-setuid \
 	--with-sha1=libgcrypt \
@@ -211,7 +211,7 @@ make %{?_smp_mflags}
 %make_install
 
 rm %{buildroot}/%{_datadir}/X11/xorg.conf.d/10-evdev.conf
-rm %{buildroot}/var/lib/xkb/compiled/README.compiled
+rm %{buildroot}/etc/X11/xkb/README.compiled
 
 %remove_docs
 
