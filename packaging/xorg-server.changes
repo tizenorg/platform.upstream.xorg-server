@@ -1,3 +1,6 @@
+* Mon Sep 30 2013 Łukasz Stelmach <l.stelmach@samsung.com> submit/tizen/20130923.164737@7f929aa
+- Enable DGA to build xf86-video-fbdev
+
 * Wed Sep 18 2013 Chengwei Yang <chengwei.yang@intel.com>
 - XKB: fix xkb data base direcotry
 

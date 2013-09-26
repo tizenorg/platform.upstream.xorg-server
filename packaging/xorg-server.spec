@@ -103,7 +103,6 @@ cp %{SOURCE1001} .
 %ifarch %ix86 x86_64
           --enable-dri \
           --enable-dri2 \
-	--enable-dga \
 	--enable-xaa \
 %else
 	--disable-debug \
@@ -114,7 +113,6 @@ cp %{SOURCE1001} .
 	--disable-glx-tls \
 	--disable-vgahw \
 	--disable-vbe \
-	--disable-dga \
 	--disable-xaa \
 %endif
 %else
@@ -125,9 +123,9 @@ cp %{SOURCE1001} .
 	--disable-glx-tls \
 	--disable-vgahw \
 	--disable-vbe \
-	--disable-dga \
 	--disable-xaa \
 %endif
+	--enable-dga \
 	--disable-strict-compilation \
 	--disable-static \
 	--disable-unit-tests \
