@@ -1,7 +1,7 @@
 %bcond_with mesa
 
 Name:           xorg-server
-Version:        1.13.4
+Version:        1.13.3
 Release:        1
 License:        MIT
 Summary:        X Server
