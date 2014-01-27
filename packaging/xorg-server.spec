@@ -1,4 +1,5 @@
 %bcond_with mesa
+%bcond_with x
 
 Name:           xorg-server
 Version:        1.13.3
@@ -60,6 +61,11 @@ Obsoletes:	xorg-x11-server-common < 1.13.0
 Provides:	xorg-x11-server-Xorg
 Obsoletes:	xorg-x11-server-Xorg < 1.13.0
 Conflicts:	xorg-server-setuid
+
+%if !%{with x}
+ExclusiveArch:
+%endif
+
 
 %description
 X.org X Server
