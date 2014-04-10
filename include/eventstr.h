@@ -72,6 +72,8 @@ enum EventType {
     ET_RawTouchUpdate,
     ET_RawTouchEnd,
     ET_XQuartz,
+    ET_BarrierHit,
+    ET_BarrierLeave,
 #ifdef _F_GESTURE_EXTENSION_
     ET_MTSync = 0x7E,
 #endif//_F_GESTURE_EXTENSION_
@@ -124,6 +126,7 @@ struct _DeviceEvent {
     int corestate;    /**< Core key/button state BEFORE the event */
     int key_repeat;   /**< Internally-generated key repeat event */
     uint32_t flags;   /**< Flags to be copied into the generated event */
+    uint32_t resource; /**< Touch event resource, only for TOUCH_REPLAYING */
 };
 
 /**
@@ -133,7 +136,7 @@ struct _DeviceEvent {
  */
 struct _TouchOwnershipEvent {
     unsigned char header; /**< Always ET_Internal */
-    enum EventType type;  /**< One of EventType */
+    enum EventType type;  /**< ET_TouchOwnership */
     int length;           /**< Length in bytes */
     Time time;            /**< Time in ms */
     int deviceid;         /**< Device to post this event for */
@@ -176,6 +179,7 @@ struct _DeviceChangedEvent {
     struct {
         uint32_t min;           /**< Minimum value */
         uint32_t max;           /**< Maximum value */
+        double value;           /**< Current value */
         /* FIXME: frac parts of min/max */
         uint32_t resolution;    /**< Resolution counts/m */
         uint8_t mode;           /**< Relative or Absolute */
@@ -230,6 +234,25 @@ struct _RawDeviceEvent {
     uint32_t flags;       /**< Flags to be copied into the generated event */
 };
 
+struct _BarrierEvent {
+    unsigned char header; /**<  Always ET_Internal */
+    enum EventType type;  /**<  ET_BarrierHit, ET_BarrierLeave */
+    int length;           /**<  Length in bytes */
+    Time time;            /**<  Time in ms */
+    int deviceid;         /**< Device to post this event for */
+    int sourceid;         /**< The physical source device */
+    int barrierid;
+    Window window;
+    Window root;
+    double dx;
+    double dy;
+    double root_x;
+    double root_y;
+    int16_t dt;
+    int32_t event_id;
+    uint32_t flags;
+};
+
 #ifdef XQUARTZ
 #define XQUARTZ_EVENT_MAXARGS 5
 struct _XQuartzEvent {
@@ -256,6 +279,7 @@ union _InternalEvent {
     DeviceEvent device_event;
     DeviceChangedEvent changed_event;
     TouchOwnershipEvent touch_ownership_event;
+    BarrierEvent barrier_event;
 #if XFreeXDGA
     DGAEvent dga_event;
 #endif

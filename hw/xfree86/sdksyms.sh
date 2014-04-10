@@ -44,6 +44,9 @@ cat > sdksyms.c << EOF
 /* miext/sync/Makefile.am */
 #include "misync.h"
 #include "misyncstr.h"
+#if HAVE_XSHMFENCE
+#include "misyncshm.h"
+#endif
 
 /* Xext/Makefile.am -- half is module, half is builtin */
 #ifdef XV
@@ -99,6 +102,7 @@ cat > sdksyms.c << EOF
 # include "dri2.h"
 #endif
 
+# include "dri3.h"
 
 /* hw/xfree86/vgahw/Makefile.am -- module */
 /*
@@ -207,7 +211,6 @@ cat > sdksyms.c << EOF
 #include "miline.h"
 #include "mipointer.h"
 #include "mi.h"
-#include "mibstore.h"
 #include "migc.h"
 #include "mipointrst.h"
 #include "mizerarc.h"
@@ -258,8 +261,10 @@ cat > sdksyms.c << EOF
 #include "dix.h"
 #include "dixaccess.h"
 #include "dixevents.h"
+#define _FONTPROTO_H
 #include "dixfont.h"
 #include "dixfontstr.h"
+#include "dixfontstubs.h"
 #include "dixgrabs.h"
 #include "dixstruct.h"
 #include "exevents.h"

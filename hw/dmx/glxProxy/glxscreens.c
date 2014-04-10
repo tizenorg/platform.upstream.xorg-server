@@ -88,7 +88,7 @@ CalcServerVersionAndExtensions(void)
         req->glxCode = X_GLXQueryVersion;
         req->majorVersion = GLX_SERVER_MAJOR_VERSION;
         req->minorVersion = GLX_SERVER_MINOR_VERSION;
-        _XReply(dpy, (xReply *) & reply, 0, False);
+        _XReply(dpy, (xReply *) &reply, 0, False);
         UnlockDisplay(dpy);
         SyncHandle();
 
@@ -138,7 +138,7 @@ CalcServerVersionAndExtensions(void)
         Display *dpy = dmxScreen->beDisplay;
         xGLXQueryServerStringReq *req;
         xGLXQueryServerStringReply reply;
-        int length, numbytes, slop;
+        int length, numbytes;
 
         /* Send the glXQueryServerString request */
         LockDisplay(dpy);
@@ -147,20 +147,17 @@ CalcServerVersionAndExtensions(void)
         req->glxCode = X_GLXQueryServerString;
         req->screen = DefaultScreen(dpy);
         req->name = GLX_EXTENSIONS;
-        _XReply(dpy, (xReply *) & reply, 0, False);
+        _XReply(dpy, (xReply *) &reply, 0, False);
 
         length = (int) reply.length;
         numbytes = (int) reply.n;
-        slop = numbytes * __GLX_SIZE_INT8 & 3;
         be_extensions[s] = (char *) malloc(numbytes);
         if (!be_extensions[s]) {
             /* Throw data on the floor */
-            _XEatData(dpy, length);
+            _XEatDataWords(dpy, length);
         }
         else {
-            _XRead(dpy, (char *) be_extensions[s], numbytes);
-            if (slop)
-                _XEatData(dpy, 4 - slop);
+            _XReadPad(dpy, (char *) be_extensions[s], numbytes);
         }
         UnlockDisplay(dpy);
         SyncHandle();

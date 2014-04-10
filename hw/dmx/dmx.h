@@ -254,10 +254,6 @@ typedef struct _DMXScreenInfo {
 /* Global variables available to all Xserver/hw/dmx routines. */
 extern int dmxNumScreens;                       /**< Number of dmxScreens */
 extern DMXScreenInfo *dmxScreens;               /**< List of outputs */
-extern int dmxShadowFB;                         /**< Non-zero if using
-
-                                                 * shadow frame-buffer
-                                                 * (deprecated) */
 extern XErrorEvent dmxLastErrorEvent;           /**< Last error that
 
                                                  * occurred */
@@ -406,5 +402,7 @@ extern DevPrivateKeyRec dmxPictPrivateKeyRec;
 extern DevPrivateKeyRec dmxGlyphSetPrivateKeyRec;
 
 #define dmxGlyphSetPrivateKey (&dmxGlyphSetPrivateKeyRec) /**< Private index for GlyphSets */
+
+void DMXExtensionInit(void);
 
 #endif                          /* DMX_H */

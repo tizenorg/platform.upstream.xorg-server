@@ -39,6 +39,9 @@
 /* Build DPMS extension */
 #undef DPMSExtension
 
+/* Build DRI3 extension */
+#undef DRI3
+
 /* Build GLX extension */
 #undef GLXEXT
 
@@ -59,6 +62,9 @@
 
 /* Has backtrace support */
 #undef HAVE_BACKTRACE
+
+/* Has libunwind support */
+#undef HAVE_LIBUNWIND
 
 /* Define to 1 if you have the <byteswap.h> header file. */
 #undef HAVE_BYTESWAP_H
@@ -157,6 +163,9 @@
 /* Define to use libgcrypt SHA1 functions */
 #undef HAVE_SHA1_IN_LIBGCRYPT
 
+/* Define to use libnettle SHA1 functions */
+#undef HAVE_SHA1_IN_LIBNETTLE
+
 /* Define to use libsha1 for SHA1 */
 #undef HAVE_SHA1_IN_LIBSHA1
 
@@ -189,6 +198,9 @@
 
 /* Define to 1 if you have the `strndup' function. */
 #undef HAVE_STRNDUP
+
+/* Define to 1 if libsystemd-daemon is available */
+#undef HAVE_SYSTEMD_DAEMON
 
 /* Define to 1 if SYSV IPC is available */
 #undef HAVE_SYSV_IPC
@@ -246,6 +258,9 @@
 /* Internal define for Xinerama */
 #undef PANORAMIX
 
+/* Support Present extension */
+#undef PRESENT
+
 /* Overall prefix */
 #undef PROJECTROOT
 
@@ -273,8 +288,14 @@
 /* Support SHAPE extension */
 #undef SHAPE
 
+/* Where to install Xorg.bin and Xorg.wrap */
+#undef SUID_WRAPPER_DIR
+
 /* Define to 1 on systems derived from System V Release 4 */
 #undef SVR4
+
+/* sysconfdir */
+#undef SYSCONFDIR
 
 /* Support TCP socket connections */
 #undef TCPCONN
@@ -402,14 +423,14 @@
 /* Use udev_enumerate_add_match_tag() */
 #undef HAVE_UDEV_ENUMERATE_ADD_MATCH_TAG
 
-/* Use D-Bus for input hotplug */
-#undef CONFIG_NEED_DBUS
-
-/* Support the D-Bus hotplug API */
-#undef CONFIG_DBUS_API
+/* Enable D-Bus core */
+#undef NEED_DBUS
 
 /* Support HAL for hotplug */
 #undef CONFIG_HAL
+
+/* Enable systemd-logind integration */
+#undef SYSTEMD_LOGIND 1
 
 /* Have a monotonic clock from clock_gettime() */
 #undef MONOTONIC_CLOCK
@@ -429,6 +450,9 @@
 /* Define to 1 if typeof works with your compiler. */
 #undef HAVE_TYPEOF
 
+/* Define to __typeof__ if your compiler spells it that way. */
+#undef typeof
+
 /* The compiler supported TLS storage class, prefering initial-exec if tls_model is supported */
 #undef TLS
 
@@ -436,5 +460,40 @@
 #ifdef __APPLE__
 #include "dix-config-apple-verbatim.h"
 #endif
+
+/* Enable general extensions on Solaris.  */
+#ifndef __EXTENSIONS__
+# undef __EXTENSIONS__
+#endif
+
+/* Defined if needed to expose struct msghdr.msg_control */
+#undef _XOPEN_SOURCE
+
+/* Have support for X shared memory fence library (xshmfence) */
+#undef HAVE_XSHMFENCE
+
+/* Use XTrans FD passing support */
+#undef XTRANS_SEND_FDS
+
+/* Wrap SIGBUS to catch MIT-SHM faults */
+#undef BUSFAULT
+
+/* Directory for shared memory temp files */
+#undef SHMDIR
+
+/* Don't let Xdefs.h define 'pointer' */
+#define _XTYPEDEF_POINTER       1
+
+/* Don't let XIproto define 'Pointer' */
+#define _XITYPEDEF_POINTER      1
+
+/* Ask fontsproto to make font path element names const */
+#define FONT_PATH_ELEMENT_NAME_CONST    1
+
+/* Build GLAMOR */
+#undef GLAMOR
+
+/* Build glamor's GBM-based EGL support */
+#undef GLAMOR_HAS_GBM
 
 #endif /* _DIX_CONFIG_H_ */

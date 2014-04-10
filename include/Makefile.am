@@ -68,7 +68,9 @@ endif
 AM_CFLAGS = $(DIX_CFLAGS)
 
 EXTRA_DIST = 	\
+	busfault.h dbus-core.h \
 	dix-config-apple-verbatim.h \
-	eventconvert.h eventstr.h inpututils.h \
+	dixfontstubs.h eventconvert.h eventstr.h inpututils.h \
 	protocol-versions.h \
+	systemd-logind.h \
 	xsha1.h

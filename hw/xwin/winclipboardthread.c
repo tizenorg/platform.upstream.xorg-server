@@ -36,6 +36,7 @@
 #define HAS_WINSOCK 1
 #endif
 #include <sys/types.h>
+#include <signal.h>
 #include "winclipboard.h"
 #ifdef __CYGWIN__
 #include <errno.h>
@@ -47,7 +48,6 @@
  */
 
 extern Bool g_fUnicodeClipboard;
-extern unsigned long serverGeneration;
 extern Bool g_fClipboardStarted;
 extern Bool g_fClipboardLaunched;
 extern Bool g_fClipboard;
@@ -83,7 +83,7 @@ static int
 void *
 winClipboardProc(void *pvNotUsed)
 {
-    Atom atomClipboard, atomClipboardManager;
+    Atom atomClipboard;
     int iReturn;
     HWND hwnd = NULL;
     int iConnectionNumber = 0;
@@ -206,9 +206,8 @@ winClipboardProc(void *pvNotUsed)
     iMaxDescriptor = iConnectionNumber + 1;
 #endif
 
-    /* Create atoms */
+    /* Create atom */
     atomClipboard = XInternAtom(pDisplay, "CLIPBOARD", False);
-    atomClipboardManager = XInternAtom(pDisplay, "CLIPBOARD_MANAGER", False);
 
     /* Create a messaging window */
     iWindow = XCreateSimpleWindow(pDisplay,
@@ -326,14 +325,7 @@ winClipboardProc(void *pvNotUsed)
         /* Branch on which descriptor became active */
         if (FD_ISSET(iConnectionNumber, &fdsRead)) {
             /* Process X events */
-            /* Exit when we see that server is shutting down */
-            iReturn = winClipboardFlushXEvents(hwnd,
-                                               iWindow, pDisplay, fUseUnicode);
-            if (WIN_XEVENTS_SHUTDOWN == iReturn) {
-                ErrorF("winClipboardProc - winClipboardFlushXEvents "
-                       "trapped shutdown event, exiting main loop.\n");
-                break;
-            }
+            winClipboardFlushXEvents(hwnd, iWindow, pDisplay, fUseUnicode);
         }
 
 #ifdef HAS_DEVWINDOWS
@@ -413,7 +405,7 @@ winClipboardProc(void *pvNotUsed)
             ("winClipboardProc - the clipboard thread has restarted %d times and seems to be unstable, disabling clipboard integration\n",
              clipboardRestarts);
         g_fClipboard = FALSE;
-        return;
+        return NULL;
     }
 
     if (g_fClipboard) {
@@ -422,7 +414,7 @@ winClipboardProc(void *pvNotUsed)
         /* Create the clipboard client thread */
         if (!winInitClipboard()) {
             ErrorF("winClipboardProc - winClipboardInit failed.\n");
-            return;
+            return NULL;
         }
 
         winDebug("winClipboardProc - winInitClipboard returned.\n");
@@ -432,7 +424,7 @@ winClipboardProc(void *pvNotUsed)
     else {
         ErrorF("winClipboardProc - Clipboard disabled  - Exit from server \n");
         /* clipboard thread has exited, stop server as well */
-        kill(getpid(), SIGTERM);
+        raise(SIGTERM);
     }
 
     return NULL;
@@ -461,7 +453,7 @@ winClipboardErrorHandler(Display * pDisplay, XErrorEvent * pErr)
 static int
 winClipboardIOErrorHandler(Display * pDisplay)
 {
-    ErrorF("winClipboardIOErrorHandler!\n\n");
+    ErrorF("winClipboardIOErrorHandler!\n");
 
     if (pthread_equal(pthread_self(), g_winClipboardProcThread)) {
         /* Restart at the main entry point */

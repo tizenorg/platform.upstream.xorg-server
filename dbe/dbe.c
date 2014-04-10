@@ -90,10 +90,7 @@ DbeStubScreen(DbeScreenPrivPtr pDbeScreenPriv, int *nStubbedScreens)
     pDbeScreenPriv->GetVisualInfo = NULL;
     pDbeScreenPriv->AllocBackBufferName = NULL;
     pDbeScreenPriv->SwapBuffers = NULL;
-    pDbeScreenPriv->BeginIdiom = NULL;
-    pDbeScreenPriv->EndIdiom = NULL;
     pDbeScreenPriv->WinPrivDelete = NULL;
-    pDbeScreenPriv->ResetProc = NULL;
 
     (*nStubbedScreens)++;
 
@@ -232,8 +229,7 @@ ProcDbeAllocateBackBufferName(ClientPtr client)
          * Allocate a window priv.
          */
 
-        pDbeWindowPriv =
-            dixAllocateObjectWithPrivates(DbeWindowPrivRec, PRIVATE_DBE_WINDOW);
+        pDbeWindowPriv = calloc(1, sizeof(DbeWindowPrivRec));
         if (!pDbeWindowPriv)
             return BadAlloc;
 
@@ -326,7 +322,7 @@ ProcDbeAllocateBackBufferName(ClientPtr client)
     if (status == Success) {
         pDbeWindowPriv->IDs[add_index] = stuff->buffer;
         if (!AddResource(stuff->buffer, dbeWindowPrivResType,
-                         (pointer) pDbeWindowPriv)) {
+                         (void *) pDbeWindowPriv)) {
             pDbeWindowPriv->IDs[add_index] = DBE_FREE_ID_ELEMENT;
 
             if (pDbeWindowPriv->nBufferIDs == 0) {
@@ -382,12 +378,12 @@ ProcDbeDeallocateBackBufferName(ClientPtr client)
     REQUEST(xDbeDeallocateBackBufferNameReq);
     DbeWindowPrivPtr pDbeWindowPriv;
     int rc, i;
-    pointer val;
+    void *val;
 
     REQUEST_SIZE_MATCH(xDbeDeallocateBackBufferNameReq);
 
     /* Buffer name must be valid */
-    rc = dixLookupResourceByType((pointer *) &pDbeWindowPriv, stuff->buffer,
+    rc = dixLookupResourceByType((void **) &pDbeWindowPriv, stuff->buffer,
                                  dbeWindowPrivResType, client,
                                  DixDestroyAccess);
     if (rc != Success)
@@ -542,44 +538,6 @@ ProcDbeSwapBuffers(ClientPtr client)
     return Success;
 
 }                               /* ProcDbeSwapBuffers() */
-
-/******************************************************************************
- *
- * DBE DIX Procedure: ProcDbeBeginIdiom
- *
- * Description:
- *
- *     This function is for processing a DbeBeginIdiom request.
- *     This request informs the server that a complex swap will immediately
- *     follow this request.
- *
- * Return Values:
- *
- *     Success
- *
- *****************************************************************************/
-
-static int
-ProcDbeBeginIdiom(ClientPtr client)
-{
-    /* REQUEST(xDbeBeginIdiomReq); */
-    DbeScreenPrivPtr pDbeScreenPriv;
-    register int i;
-
-    REQUEST_SIZE_MATCH(xDbeBeginIdiomReq);
-
-    for (i = 0; i < screenInfo.numScreens; i++) {
-        pDbeScreenPriv = DBE_SCREEN_PRIV(screenInfo.screens[i]);
-
-        /* Call the DDX begin idiom procedure if there is one. */
-        if (pDbeScreenPriv->BeginIdiom) {
-            (*pDbeScreenPriv->BeginIdiom) (client);
-        }
-    }
-
-    return Success;
-
-}                               /* ProcDbeBeginIdiom() */
 
 /******************************************************************************
  *
@@ -768,7 +726,7 @@ ProcDbeGetBackBufferAttributes(ClientPtr client)
 
     REQUEST_SIZE_MATCH(xDbeGetBackBufferAttributesReq);
 
-    rc = dixLookupResourceByType((pointer *) &pDbeWindowPriv, stuff->buffer,
+    rc = dixLookupResourceByType((void **) &pDbeWindowPriv, stuff->buffer,
                                  dbeWindowPrivResType, client,
                                  DixGetAttrAccess);
     if (rc == Success) {
@@ -818,7 +776,7 @@ ProcDbeDispatch(ClientPtr client)
         return (ProcDbeSwapBuffers(client));
 
     case X_DbeBeginIdiom:
-        return (ProcDbeBeginIdiom(client));
+        return Success;
 
     case X_DbeEndIdiom:
         return Success;
@@ -982,32 +940,6 @@ SProcDbeSwapBuffers(ClientPtr client)
 
 /******************************************************************************
  *
- * DBE DIX Procedure: SProcDbeBeginIdiom
- *
- * Description:
- *
- *     This function is for processing a DbeBeginIdiom request on a swapped
- *     server.  This request informs the server that a complex swap will
- *     immediately follow this request.
- *
- * Return Values:
- *
- *     Success
- *
- *****************************************************************************/
-
-static int
-SProcDbeBeginIdiom(ClientPtr client)
-{
-    REQUEST(xDbeBeginIdiomReq);
-
-    swaps(&stuff->length);
-    return (ProcDbeBeginIdiom(client));
-
-}                               /* SProcDbeBeginIdiom() */
-
-/******************************************************************************
- *
  * DBE DIX Procedure: SProcDbeGetVisualInfo
  *
  * Description:
@@ -1097,7 +1029,7 @@ SProcDbeDispatch(ClientPtr client)
         return (SProcDbeSwapBuffers(client));
 
     case X_DbeBeginIdiom:
-        return (SProcDbeBeginIdiom(client));
+        return Success;
 
     case X_DbeEndIdiom:
         return Success;
@@ -1193,7 +1125,7 @@ DbeSetupBackgroundPainter(WindowPtr pWin, GCPtr pGC)
  *
  *****************************************************************************/
 static int
-DbeDrawableDelete(pointer pDrawable, XID id)
+DbeDrawableDelete(void *pDrawable, XID id)
 {
     return Success;
 
@@ -1211,7 +1143,7 @@ DbeDrawableDelete(pointer pDrawable, XID id)
  *
  *****************************************************************************/
 static int
-DbeWindowPrivDelete(pointer pDbeWinPriv, XID id)
+DbeWindowPrivDelete(void *pDbeWinPriv, XID id)
 {
     DbeScreenPrivPtr pDbeScreenPriv;
     DbeWindowPrivPtr pDbeWindowPriv = (DbeWindowPrivPtr) pDbeWinPriv;
@@ -1289,7 +1221,7 @@ DbeWindowPrivDelete(pointer pDbeWinPriv, XID id)
                       NULL);
 
         /* We are done with the window priv. */
-        dixFreeObjectWithPrivates(pDbeWindowPriv, PRIVATE_DBE_WINDOW);
+        free(pDbeWindowPriv);
     }
 
     return Success;
@@ -1321,10 +1253,7 @@ DbeResetProc(ExtensionEntry * extEntry)
         if (pDbeScreenPriv) {
             /* Unwrap DestroyWindow, which was wrapped in DbeExtensionInit(). */
             pScreen->DestroyWindow = pDbeScreenPriv->DestroyWindow;
-
-            if (pDbeScreenPriv->ResetProc)
-                (*pDbeScreenPriv->ResetProc) (pScreen);
-
+            pScreen->PositionWindow = pDbeScreenPriv->PositionWindow;
             free(pDbeScreenPriv);
         }
     }

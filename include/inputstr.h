@@ -65,13 +65,13 @@ extern _X_EXPORT int CountBits(const uint8_t * mask, int len);
 #define SameClient(obj,client) \
 	(CLIENT_BITS((obj)->resource) == (client)->clientAsMask)
 
-#define EMASKSIZE	MAXDEVICES + 2
+#define EMASKSIZE	(MAXDEVICES + 2)
 
 /* This is the last XI2 event supported by the server. If you add
  * events to the protocol, the server will not support these events until
  * this number here is bumped.
  */
-#define XI2LASTEVENT    XI_RawTouchEnd
+#define XI2LASTEVENT    XI_BarrierLeave
 #define XI2MASKSIZE     ((XI2LASTEVENT >> 3) + 1)       /* no of bytes for masks */
 
 /**
@@ -195,7 +195,7 @@ typedef struct _GrabRec {
     unsigned keyboardMode:1;
     unsigned pointerMode:1;
     enum InputLevel grabtype;
-    CARD8 type;                 /* event type */
+    CARD8 type;                 /* event type for passive grabs, 0 for active grabs */
     DetailRec modifiersDetail;
     DeviceIntPtr modifierDevice;
     DetailRec detail;           /* key or button */
@@ -447,7 +447,7 @@ typedef struct _XIPropertyValue {
     Atom type;                  /* ignored by server */
     short format;               /* format of data for swapping - 8,16,32 */
     long size;                  /* size of data in (format/8) bytes */
-    pointer data;               /* private to client */
+    void *data;                 /* private to client */
 } XIPropertyValueRec;
 
 typedef struct _XIProperty {
@@ -485,7 +485,7 @@ typedef struct _GrabInfoRec {
     TimeStamp grabTime;
     Bool fromPassiveGrab;       /* true if from passive grab */
     Bool implicitGrab;          /* implicit from ButtonPress */
-    GrabPtr activeGrab;
+    GrabPtr unused;             /* Kept for ABI stability, remove soon */
     GrabPtr grab;
     CARD8 activatingKey;
     void (*ActivateGrab) (DeviceIntPtr /*device */ ,
@@ -588,8 +588,12 @@ typedef struct _DeviceIntRec {
         XIPropertyHandlerPtr handlers;  /* NULL-terminated */
     } properties;
 
-    /* coordinate transformation matrix for absolute input devices */
-    struct pixman_f_transform transform;
+    /* coordinate transformation matrix for relative movement. Matrix with
+     * the translation component dropped */
+    struct pixman_f_transform relative_transform;
+    /* scale matrix for absolute devices, this is the combined matrix of
+       [1/scale] . [transform] . [scale]. See DeviceSetTransform */
+    struct pixman_f_transform scale_and_transform;
 
     /* XTest related master device id */
     int xtest_master_id;

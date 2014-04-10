@@ -339,7 +339,7 @@ dmxCommonOthOn(DevicePtr pDev)
     if (!(priv->xi = XOpenDevice(priv->display, dmxLocal->deviceId))) {
         dmxLog(dmxWarning, "Cannot open %s device (id=%d) on %s\n",
                dmxLocal->deviceName ? dmxLocal->deviceName : "(unknown)",
-               dmxLocal->deviceId, dmxInput->name);
+               (int) dmxLocal->deviceId, dmxInput->name);
         return -1;
     }
     ADD(DeviceKeyPress);
@@ -502,11 +502,6 @@ dmxCommonMouOn(DevicePtr pDev)
     GETDMXINPUTFROMPRIV;
 
     priv->eventMask |= DMX_POINTER_EVENT_MASK;
-    if (dmxShadowFB) {
-        XWarpPointer(priv->display, priv->window, priv->window,
-                     0, 0, 0, 0, priv->initPointerX, priv->initPointerY);
-        dmxSync(&dmxScreens[dmxInput->scrnIdx], TRUE);
-    }
     if (!priv->be) {
         XSelectInput(priv->display, priv->window, priv->eventMask);
         AddEnabledDevice(XConnectionNumber(priv->display));
@@ -563,7 +558,7 @@ dmxFindPointerScreen(int x, int y)
  * (e.g., when a keyboard and mouse form a pair that should share the
  * same private area).  If the requested private area cannot be located,
  * then NULL is returned. */
-pointer
+void *
 dmxCommonCopyPrivate(DeviceIntPtr pDevice)
 {
     GETDMXLOCALFROMPDEVICE;
@@ -588,7 +583,7 @@ dmxCommonCopyPrivate(DeviceIntPtr pDevice)
  * server startup and server shutdown).
  */
 void
-dmxCommonSaveState(pointer private)
+dmxCommonSaveState(void *private)
 {
     GETPRIVFROMPRIVATE;
     XKeyboardState ks;
@@ -646,7 +641,7 @@ dmxCommonSaveState(pointer private)
 
 /** This routine restores all the information saved by #dmxCommonSaveState. */
 void
-dmxCommonRestoreState(pointer private)
+dmxCommonRestoreState(void *private)
 {
     GETPRIVFROMPRIVATE;
     int retcode = -1;

@@ -114,7 +114,7 @@ winHandleIconMessage(HWND hwnd, UINT message,
     switch (lParam) {
     case WM_LBUTTONUP:
         /* Restack and bring all windows to top */
-        SetForegroundWindow(hwnd);
+        SetForegroundWindow (pScreenPriv->hwndScreen);
 
 #ifdef XWIN_MULTIWINDOWEXTWM
         if (pScreenInfo->fMWExtWM)
@@ -170,7 +170,7 @@ winHandleIconMessage(HWND hwnd, UINT message,
             RemoveMenu(hmenuTray, ID_APP_HIDE_ROOT, MF_BYCOMMAND);
         }
 
-        SetupRootMenu((unsigned long) hmenuTray);
+        SetupRootMenu(hmenuTray);
 
         /*
          * NOTE: This three-step procedure is required for

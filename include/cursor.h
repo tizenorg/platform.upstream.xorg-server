@@ -68,8 +68,12 @@ extern _X_EXPORT DevScreenPrivateKeyRec cursorScreenDevPriv;
 
 extern _X_EXPORT CursorPtr rootCursor;
 
-extern _X_EXPORT int FreeCursor(pointer /*pCurs */ ,
+extern _X_EXPORT int FreeCursor(void */*pCurs */ ,
                                 XID /*cid */ );
+
+extern _X_EXPORT CursorPtr RefCursor(CursorPtr /* cursor */);
+extern _X_EXPORT CursorPtr UnrefCursor(CursorPtr /* cursor */);
+extern _X_EXPORT int CursorRefCount(const CursorPtr /* cursor */);
 
 extern _X_EXPORT int AllocARGBCursor(unsigned char * /*psrcbits */ ,
                                      unsigned char * /*pmaskbits */ ,

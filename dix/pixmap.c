@@ -49,7 +49,7 @@ from The Open Group.
 /* callable by ddx */
 PixmapPtr
 GetScratchPixmapHeader(ScreenPtr pScreen, int width, int height, int depth,
-                       int bitsPerPixel, int devKind, pointer pPixData)
+                       int bitsPerPixel, int devKind, void *pPixData)
 {
     PixmapPtr pPixmap = pScreen->pScratchPixmap;
 
@@ -202,7 +202,6 @@ PixmapStopDirtyTracking(PixmapPtr src, PixmapPtr slave_dst)
 
     xorg_list_for_each_entry_safe(ent, safe, &screen->pixmap_dirty_list, ent) {
         if (ent->src == src && ent->slave_dst == slave_dst) {
-            DamageUnregister(&src->drawable, ent->damage);
             DamageDestroy(ent->damage);
             xorg_list_del(&ent->ent);
             free(ent);
@@ -243,6 +242,8 @@ Bool PixmapSyncDirtyHelper(PixmapDirtyUpdatePtr dirty, RegionPtr dirty_region)
     }
 
     dst = dirty->slave_dst->master_pixmap;
+    if (!dst)
+        dst = dirty->slave_dst;
 
     RegionTranslate(dirty_region, -dirty->x, -dirty->y);
     n = RegionNumRects(dirty_region);

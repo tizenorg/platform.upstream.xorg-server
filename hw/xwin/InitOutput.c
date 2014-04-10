@@ -48,14 +48,21 @@ from The Open Group.
 #include "xkbsrv.h"
 #endif
 #ifdef RELOCATE_PROJECTROOT
+#pragma push_macro("Status")
+#undef Status
+#define Status wStatus
 #include <shlobj.h>
+#pragma pop_macro("Status")
 typedef WINAPI HRESULT(*SHGETFOLDERPATHPROC) (HWND hwndOwner,
                                               int nFolder,
                                               HANDLE hToken,
                                               DWORD dwFlags, LPTSTR pszPath);
 #endif
-
 #include "glx_extinit.h"
+#ifdef XWIN_GLX_WINDOWS
+#include "glx/glwindows.h"
+#endif
+
 /*
  * References to external symbols
  */
@@ -75,11 +82,6 @@ extern Bool g_fClipboard;
 #ifdef XWIN_CLIPBOARD
 static void
  winClipboardShutdown(void);
-#endif
-
-#if defined(DDXOSVERRORF)
-void
- OsVendorVErrorF(const char *pszFormat, va_list va_args);
 #endif
 
 static Bool
@@ -161,8 +163,6 @@ static const ExtensionModule xwinExtensions[] = {
 static
 void XwinExtensionInit(void)
 {
-    int i;
-
 #ifdef XWIN_GLX_WINDOWS
     if (g_fNativeGl) {
         /* install the native GL provider */
@@ -170,8 +170,7 @@ void XwinExtensionInit(void)
     }
 #endif
 
-    for (i = 0; i < ARRAY_SIZE(xwinExtensions); i++)
-        LoadExtension(&xwinExtensions[i], TRUE);
+    LoadExtensionList(xwinExtensions, ARRAY_SIZE(xwinExtensions), TRUE);
 }
 
 #if defined(DDXBEFORERESET)
@@ -191,6 +190,25 @@ ddxBeforeReset(void)
 }
 #endif
 
+int
+main(int argc, char *argv[], char *envp[])
+{
+    int iReturn;
+
+    /* Create & acquire the termination mutex */
+    iReturn = pthread_mutex_init(&g_pmTerminating, NULL);
+    if (iReturn != 0) {
+        ErrorF("ddxMain - pthread_mutex_init () failed: %d\n", iReturn);
+    }
+
+    iReturn = pthread_mutex_lock(&g_pmTerminating);
+    if (iReturn != 0) {
+        ErrorF("ddxMain - pthread_mutex_lock () failed: %d\n", iReturn);
+    }
+
+    return dix_main(argc, argv, envp);
+}
+
 /* See Porting Layer Definition - p. 57 */
 void
 ddxGiveUp(enum ExitCode error)
@@ -209,6 +227,9 @@ ddxGiveUp(enum ExitCode error)
     }
 
 #ifdef XWIN_MULTIWINDOW
+    /* Unload libraries for taskbar grouping */
+    winPropertyStoreDestroy();
+
     /* Notify the worker threads we're exiting */
     winDeinitMultiWindowWM();
 #endif
@@ -245,6 +266,19 @@ ddxGiveUp(enum ExitCode error)
 
     /* Tell Windows that we want to end the app */
     PostQuitMessage(0);
+
+    {
+        int iReturn = pthread_mutex_unlock(&g_pmTerminating);
+
+        winDebug("ddxGiveUp - Releasing termination mutex\n");
+
+        if (iReturn != 0) {
+            ErrorF("winMsgWindowProc - pthread_mutex_unlock () failed: %d\n",
+                   iReturn);
+        }
+    }
+
+    winDebug("ddxGiveUp - End\n");
 }
 
 /* See Porting Layer Definition - p. 57 */
@@ -299,11 +333,11 @@ winCheckMount(void)
     }
 
     while ((ent = getmntent(mnt)) != NULL) {
-        BOOL system = (winCheckMntOpt(ent, "user") != NULL);
+        BOOL sys = (winCheckMntOpt(ent, "user") != NULL);
         BOOL root = (strcmp(ent->mnt_dir, "/") == 0);
         BOOL tmp = (strcmp(ent->mnt_dir, "/tmp") == 0);
 
-        if (system) {
+        if (sys) {
             if (root)
                 curlevel = sys_root;
             else if (tmp)
@@ -749,6 +783,9 @@ winUseMsg(void)
 
     ErrorF("-fullscreen\n" "\tRun the server in fullscreen mode.\n");
 
+    ErrorF("-hostintitle\n"
+           "\tIn multiwindow mode, add remote host names to window titles.\n");
+
     ErrorF("-ignoreinput\n" "\tIgnore keyboard and mouse input.\n");
 
 #ifdef XWIN_MULTIWINDOWEXTWM
@@ -809,7 +846,7 @@ winUseMsg(void)
     ErrorF("-resize=none|scrollbars|randr"
            "\tIn windowed mode, [don't] allow resizing of the window. 'scrollbars'\n"
            "\tmode gives the window scrollbars as needed, 'randr' mode uses the RANR\n"
-           "\textension to resize the X screen.\n");
+           "\textension to resize the X screen.  'randr' is the default.\n");
 
     ErrorF("-rootless\n" "\tRun the server in rootless mode.\n");
 
@@ -842,7 +879,7 @@ winUseMsg(void)
 
 #ifdef XWIN_GLX_WINDOWS
     ErrorF("-[no]wgl\n"
-           "\tEnable the GLX extension to use the native Windows WGL interface for accelerated OpenGL\n");
+           "\tEnable the GLX extension to use the native Windows WGL interface for hardware-accelerated OpenGL\n");
 #endif
 
     ErrorF("-[no]winkill\n" "\tAlt+F4 exits the X Server.\n");
@@ -897,7 +934,7 @@ ddxUseMsg(void)
  */
 
 void
-InitOutput(ScreenInfo * screenInfo, int argc, char *argv[])
+InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
 {
     int i;
 
@@ -940,15 +977,15 @@ InitOutput(ScreenInfo * screenInfo, int argc, char *argv[])
     LoadPreferences();
 
     /* Setup global screen info parameters */
-    screenInfo->imageByteOrder = IMAGE_BYTE_ORDER;
-    screenInfo->bitmapScanlinePad = BITMAP_SCANLINE_PAD;
-    screenInfo->bitmapScanlineUnit = BITMAP_SCANLINE_UNIT;
-    screenInfo->bitmapBitOrder = BITMAP_BIT_ORDER;
-    screenInfo->numPixmapFormats = NUMFORMATS;
+    pScreenInfo->imageByteOrder = IMAGE_BYTE_ORDER;
+    pScreenInfo->bitmapScanlinePad = BITMAP_SCANLINE_PAD;
+    pScreenInfo->bitmapScanlineUnit = BITMAP_SCANLINE_UNIT;
+    pScreenInfo->bitmapBitOrder = BITMAP_BIT_ORDER;
+    pScreenInfo->numPixmapFormats = NUMFORMATS;
 
     /* Describe how we want common pixmap formats padded */
     for (i = 0; i < NUMFORMATS; i++) {
-        screenInfo->formats[i] = g_PixmapFormats[i];
+        pScreenInfo->formats[i] = g_PixmapFormats[i];
     }
 
     /* Load pointers to DirectDraw functions */
@@ -956,9 +993,17 @@ InitOutput(ScreenInfo * screenInfo, int argc, char *argv[])
 
     /* Detect supported engines */
     winDetectSupportedEngines();
+#ifdef XWIN_MULTIWINDOW
+    /* Load libraries for taskbar grouping */
+    winPropertyStoreInit();
+#endif
 
     /* Store the instance handle */
     g_hInstance = GetModuleHandle(NULL);
+
+    /* Create the messaging window */
+    if (serverGeneration == 1)
+        winCreateMsgWindowThread();
 
     /* Initialize each screen */
     for (i = 0; i < g_iNumScreens; ++i) {
@@ -1040,7 +1085,7 @@ winCheckDisplayNumber(void)
                       NULL,
                       GetLastError(),
                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                      (LPTSTR) & lpMsgBuf, 0, NULL);
+                      (LPTSTR) &lpMsgBuf, 0, NULL);
         ErrorF("winCheckDisplayNumber - CreateMutex failed: %s\n",
                (LPSTR) lpMsgBuf);
         LocalFree(lpMsgBuf);

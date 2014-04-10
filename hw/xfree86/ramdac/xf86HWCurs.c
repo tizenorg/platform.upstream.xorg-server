@@ -119,7 +119,7 @@ xf86InitHardwareCursor(ScreenPtr pScreen, xf86CursorInfoPtr infoPtr)
     return TRUE;
 }
 
-void
+Bool
 xf86SetCursor(ScreenPtr pScreen, CursorPtr pCurs, int x, int y)
 {
     xf86CursorScreenPtr ScreenPriv =
@@ -130,7 +130,7 @@ xf86SetCursor(ScreenPtr pScreen, CursorPtr pCurs, int x, int y)
 
     if (pCurs == NullCursor) {
         (*infoPtr->HideCursor) (infoPtr->pScrn);
-        return;
+        return TRUE;
     }
 
     bits =
@@ -152,18 +152,21 @@ xf86SetCursor(ScreenPtr pScreen, CursorPtr pCurs, int x, int y)
         (*infoPtr->HideCursor) (infoPtr->pScrn);
 
 #ifdef ARGB_CURSOR
-    if (pCurs->bits->argb && infoPtr->LoadCursorARGB)
-        (*infoPtr->LoadCursorARGB) (infoPtr->pScrn, pCurs);
-    else
+    if (pCurs->bits->argb && infoPtr->LoadCursorARGB) {
+        if (!(*infoPtr->LoadCursorARGB) (infoPtr->pScrn, pCurs))
+            return FALSE;
+    } else
 #endif
     if (bits)
-        (*infoPtr->LoadCursorImage) (infoPtr->pScrn, bits);
+        if (!(*infoPtr->LoadCursorImage) (infoPtr->pScrn, bits))
+            return FALSE;
 
     xf86RecolorCursor(pScreen, pCurs, 1);
 
     (*infoPtr->SetCursorPosition) (infoPtr->pScrn, x, y);
 
     (*infoPtr->ShowCursor) (infoPtr->pScrn);
+    return TRUE;
 }
 
 void
@@ -462,9 +465,9 @@ RealizeCursorInterleave16(xf86CursorInfoPtr infoPtr, CursorPtr pCurs)
     }
 
     /* 16 bit interleave */
-    DstS = (pointer) mem2;
+    DstS = (void *) mem2;
     DstM = DstS + (size >> 2);
-    pntr = (pointer) mem;
+    pntr = (void *) mem;
     count = (size >> 1);
     while (count) {
         *pntr++ = *DstS++;
@@ -497,9 +500,9 @@ RealizeCursorInterleave32(xf86CursorInfoPtr infoPtr, CursorPtr pCurs)
     }
 
     /* 32 bit interleave */
-    DstS = (pointer) mem2;
+    DstS = (void *) mem2;
     DstM = DstS + (size >> 3);
-    pntr = (pointer) mem;
+    pntr = (void *) mem;
     count = (size >> 2);
     while (count) {
         *pntr++ = *DstS++;
@@ -532,9 +535,9 @@ RealizeCursorInterleave64(xf86CursorInfoPtr infoPtr, CursorPtr pCurs)
     }
 
     /* 64 bit interleave */
-    DstS = (pointer) mem2;
+    DstS = (void *) mem2;
     DstM = DstS + (size >> 3);
-    pntr = (pointer) mem;
+    pntr = (void *) mem;
     count = (size >> 2);
     while (count) {
         *pntr++ = *DstS++;

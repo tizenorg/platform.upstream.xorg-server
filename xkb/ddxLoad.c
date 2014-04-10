@@ -30,14 +30,6 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #include <xkb-config.h>
 
-#ifdef HAVE_SHA1_IN_LIBMD /* Use libmd for SHA1 */
-# include <sha1.h>
-#elif defined(HAVE_SHA1_IN_LIBGCRYPT) /* Use libgcrypt for SHA1 */
-# include <gcrypt.h>
-#else /* Use OpenSSL's libcrypto */
-# include <stddef.h>  /* buggy openssl/sha.h wants size_t */
-# include <openssl/sha.h>
-#endif
 #include <stdio.h>
 #include <ctype.h>
 #include <X11/X.h>
@@ -51,8 +43,19 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #define	XKBSRV_NEED_FILE_FUNCS
 #include <xkbsrv.h>
 #include <X11/extensions/XI.h>
-#include <errno.h>
 #include "xkb.h"
+
+        /*
+         * If XKM_OUTPUT_DIR specifies a path without a leading slash, it is
+         * relative to the top-level XKB configuration directory.
+         * Making the server write to a subdirectory of that directory
+         * requires some work in the general case (install procedure
+         * has to create links to /var or somesuch on many machines),
+         * so we just compile into /usr/tmp for now.
+         */
+#ifndef XKM_OUTPUT_DIR
+#define	XKM_OUTPUT_DIR	"compiled/"
+#endif
 
 #define	PRE_ERROR_MSG "\"The XKEYBOARD keymap compiler (xkbcomp) reports:\""
 #define	ERROR_PREFIX	"\"> \""
@@ -65,9 +68,8 @@ THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #define PATHSEPARATOR "/"
 #endif
 
-#ifndef SHA_DIGEST_LENGTH
-#define SHA_DIGEST_LENGTH 20
-#endif
+static unsigned
+LoadXKM(unsigned want, unsigned need, const char *keymap, XkbDescPtr *xkbRtrn);
 
 static void
 OutputDirectory(char *outdir, size_t size)
@@ -91,81 +93,23 @@ OutputDirectory(char *outdir, size_t size)
     }
 }
 
-static Bool
-Sha1Asc(char sha1Asc[SHA_DIGEST_LENGTH*2+1], const char * input)
-{
-    int i;
-    unsigned char sha1[SHA_DIGEST_LENGTH];
+/**
+ * Callback invoked by XkbRunXkbComp. Write to out to talk to xkbcomp.
+ */
+typedef void (*xkbcomp_buffer_callback)(FILE *out, void *userdata);
 
-#ifdef HAVE_SHA1_IN_LIBMD /* Use libmd for SHA1 */
-    SHA1_CTX ctx;
-
-    SHA1Init (&ctx);
-    SHA1Update (&ctx, input, strlen(input));
-    SHA1Final (sha1, &ctx);
-#elif defined(HAVE_SHA1_IN_LIBGCRYPT) /* Use libgcrypt for SHA1 */
-    static int init;
-    gcry_md_hd_t h;
-    gcry_error_t err;
-
-    if (!init) {
-        if (!gcry_check_version(NULL))
-            return BadAlloc;
-        gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
-        gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
-        init = 1;
-    }
-
-    err = gcry_md_open(&h, GCRY_MD_SHA1, 0);
-    if (err)
-        return BadAlloc;
-
-    gcry_md_write(h, input, strlen(input));
-
-    memcpy(sha1, gcry_md_read(h, GCRY_MD_SHA1), 20);
-    gcry_md_close(h);
-#else /* Use OpenSSL's libcrypto */
-    SHA_CTX ctx;
-    int success;
-
-    success = SHA1_Init (&ctx);
-    if (! success)
-	return BadAlloc;
-
-    success = SHA1_Update (&ctx, input, strlen(input));
-    if (! success)
-	return BadAlloc;
-
-    success = SHA1_Final (sha1, &ctx);
-    if (! success)
-	return BadAlloc;
-#endif
-
-    /* convert sha1 to sha1_asc */
-    for(i=0; i<SHA_DIGEST_LENGTH; ++i) {
-	sprintf(sha1Asc+i*2, "%02X", sha1[i]);
-    }
-
-    return Success;
-}
-
-/* call xkbcomp and compile XKB keymap, return xkm file name in
-   nameRtrn */
-static Bool
-XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
-                           XkbComponentNamesPtr names,
-                           unsigned want,
-                           unsigned need, char *nameRtrn, int nameRtrnLen)
+/**
+ * Start xkbcomp, let the callback write into xkbcomp's stdin. When done,
+ * return a strdup'd copy of the file name we've written to.
+ */
+static char *
+RunXkbComp(xkbcomp_buffer_callback callback, void *userdata)
 {
     FILE *out;
-    char *buf = NULL, xkmfile[PATH_MAX], xkm_output_dir[PATH_MAX];
-    char *tmpXkmFile = NULL;
-    char *canonicalXkmFileName = NULL;
-    char sha1Asc[SHA_DIGEST_LENGTH*2+1], xkbKeyMapBuf[100*1024];
-    int	 ret, result;
+    char *buf = NULL, keymap[PATH_MAX], xkm_output_dir[PATH_MAX];
 
     const char *emptystring = "";
-    char       *xkbbasedirflag = NULL;
+    char *xkbbasedirflag = NULL;
     const char *xkbbindir = emptystring;
     const char *xkbbindirsep = emptystring;
 
@@ -173,66 +117,14 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
     /* WIN32 has no popen. The input must be stored in a file which is
        used as input for xkbcomp. xkbcomp does not read from stdin. */
     char tmpname[PATH_MAX];
-    const char *xkbfile = tmpname;
+    const char *xkmfile = tmpname;
 #else
-    const char *xkbfile = "-";
+    const char *xkmfile = "-";
 #endif
 
-    /* Write keymap source (xkbfile) to memory buffer `xkbKeyMapBuf',
-       of which SHA1 is generated and used as result xkm file name  */
-    memset(xkbKeyMapBuf, 0, sizeof(xkbKeyMapBuf));
-    out = fmemopen(xkbKeyMapBuf, sizeof(xkbKeyMapBuf), "w");
-    if (NULL == out) {
-        ErrorF("[xkb] Open xkbKeyMapBuf for writing failed\n");
-        return FALSE;
-    }
-    ret = XkbWriteXKBKeymapForNames(out, names, xkb, want, need);
-    if (fclose(out) !=0) {
-        ErrorF("[xkb] XkbWriteXKBKeymapForNames error, perhaps xkbKeyMapBuf is too small\n");
-        return FALSE;
-    }
-#ifdef DEBUG
-    if (xkbDebugFlags) {
-        ErrorF("[xkb] XkbDDXCompileKeymapByNames compiling keymap:\n");
-        fputs(xkbKeyMapBuf, stderr);
-    }
-#endif
-    if (!ret) {
-        ErrorF("[xkb] Generating XKB Keymap failed, giving up compiling keymap\n");
-        return FALSE;
-    }
-
-    DebugF("[xkb] computing SHA1 of keymap\n");
-    if (Success == Sha1Asc(sha1Asc, xkbKeyMapBuf)) {
-        snprintf(xkmfile, sizeof(xkmfile), "server-%s", sha1Asc);
-    } else {
-        ErrorF("[xkb] Computing SHA1 of keymap failed, "
-               "using display name instead as xkm file name\n");
-        snprintf(xkmfile, sizeof(xkmfile), "server-%s", display);
-    }
+    snprintf(keymap, sizeof(keymap), "server-%s", display);
 
     OutputDirectory(xkm_output_dir, sizeof(xkm_output_dir));
-
-    /* set nameRtrn, fail if it's too small */
-    if ((strlen(xkmfile)+1 > nameRtrnLen) && nameRtrn) {
-        ErrorF("[xkb] nameRtrn too small to hold xkmfile name\n");
-        return FALSE;
-    }
-    strncpy(nameRtrn, xkmfile, nameRtrnLen);
-
-    /* if the xkm file already exists, reuse it */
-    canonicalXkmFileName = Xprintf("%s%s.xkm", xkm_output_dir, xkmfile);
-    if (access(canonicalXkmFileName, R_OK) == 0) {
-        /* yes, we can reuse the old xkm file */
-        LogMessage(X_INFO, "XKB: reuse xkmfile %s\n", canonicalXkmFileName);
-        result = TRUE;
-        goto _ret;
-    }
-    LogMessage(X_INFO, "XKB: generating xkmfile %s\n", canonicalXkmFileName);
-
-    /* continue to call xkbcomp to compile the keymap. to avoid race
-       condition, we compile it to a tmpfile then rename it to
-       xkmfile */
 
 #ifdef WIN32
     strcpy(tmpname, Win32TempDir());
@@ -256,21 +148,15 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
         }
     }
 
-    if ( (tmpXkmFile = tempnam(xkm_output_dir, NULL)) == NULL ) {
-        ErrorF("[xkb] Can't generate temp xkm file name");
-        result = FALSE;
-        goto _ret;
-    }
-
     if (asprintf(&buf,
                  "\"%s%sxkbcomp\" -w %d %s -xkm \"%s\" "
-                 "-em1 %s -emp %s -eml %s \"%s\"",
+                 "-em1 %s -emp %s -eml %s \"%s%s.xkm\"",
                  xkbbindir, xkbbindirsep,
                  ((xkbDebugFlags < 2) ? 1 :
                   ((xkbDebugFlags > 10) ? 10 : (int) xkbDebugFlags)),
-                 xkbbasedirflag ? xkbbasedirflag : "", xkbfile,
+                 xkbbasedirflag ? xkbbasedirflag : "", xkmfile,
                  PRE_ERROR_MSG, ERROR_PREFIX, POST_ERROR_MSG1,
-                 tmpXkmFile) == -1)
+                 xkm_output_dir, keymap) == -1)
         buf = NULL;
 
     free(xkbbasedirflag);
@@ -278,13 +164,8 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
     if (!buf) {
         LogMessage(X_ERROR,
                    "XKB: Could not invoke xkbcomp: not enough memory\n");
-        return FALSE;
+        return NULL;
     }
-
-    /* there's a potential race condition between calling tempnam()
-       and invoking xkbcomp to write the result file (potential temp
-       file name conflicts), but since xkbcomp is a standalone
-       program, we have to live with this */
 
 #ifndef WIN32
     out = Popen(buf, "w");
@@ -293,44 +174,25 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
 #endif
 
     if (out != NULL) {
-        /* write XKBKeyMapBuf to xkbcomp */
-        if (EOF==fputs(xkbKeyMapBuf, out))
-        {
-            ErrorF("[xkb] Sending keymap to xkbcomp failed\n");
-            result = FALSE;
-            goto _ret;
-        }
+        /* Now write to xkbcomp */
+        (*callback)(out, userdata);
+
 #ifndef WIN32
         if (Pclose(out) == 0)
 #else
         if (fclose(out) == 0 && System(buf) >= 0)
 #endif
         {
-            /* xkbcomp success */
             if (xkbDebugFlags)
                 DebugF("[xkb] xkb executes: %s\n", buf);
-            /* if canonicalXkmFileName already exists now, we simply
-               overwrite it, this is OK */
-            ret = rename(tmpXkmFile, canonicalXkmFileName);
-            if (0 != ret) {
-                ErrorF("[xkb] Can't rename %s to %s, error: %s\n",
-                       tmpXkmFile, canonicalXkmFileName,
-                       strerror(errno));
-
-                /* in case of error, don't unlink tmpXkmFile, leave it
-                   for debugging */
-
-                result = FALSE;
-                goto _ret;
-            }
+            free(buf);
 #ifdef WIN32
             unlink(tmpname);
 #endif
-            result = TRUE;
-            goto _ret;
+            return xnfstrdup(keymap);
         }
         else
-            LogMessage(X_ERROR, "Error compiling keymap (%s)\n", xkbfile);
+            LogMessage(X_ERROR, "Error compiling keymap (%s)\n", keymap);
 #ifdef WIN32
         /* remove the temporary file */
         unlink(tmpname);
@@ -343,22 +205,101 @@ XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
         LogMessage(X_ERROR, "Could not open file %s\n", tmpname);
 #endif
     }
-    if (nameRtrn)
-        nameRtrn[0] = '\0';
-    result = FALSE;
+    free(buf);
+    return NULL;
+}
 
-_ret:
-    if (tmpXkmFile)
-        free(tmpXkmFile);
-    if (canonicalXkmFileName)
-        free(canonicalXkmFileName);
-    if (buf != NULL)
-        free(buf);
-    return result;
+typedef struct {
+    XkbDescPtr xkb;
+    XkbComponentNamesPtr names;
+    unsigned int want;
+    unsigned int need;
+} XkbKeymapNamesCtx;
+
+static void
+xkb_write_keymap_for_names_cb(FILE *out, void *userdata)
+{
+    XkbKeymapNamesCtx *ctx = userdata;
+#ifdef DEBUG
+    if (xkbDebugFlags) {
+        ErrorF("[xkb] XkbDDXCompileKeymapByNames compiling keymap:\n");
+        XkbWriteXKBKeymapForNames(stderr, ctx->names, ctx->xkb, ctx->want, ctx->need);
+    }
+#endif
+    XkbWriteXKBKeymapForNames(out, ctx->names, ctx->xkb, ctx->want, ctx->need);
+}
+
+static Bool
+XkbDDXCompileKeymapByNames(XkbDescPtr xkb,
+                           XkbComponentNamesPtr names,
+                           unsigned want,
+                           unsigned need, char *nameRtrn, int nameRtrnLen)
+{
+    char *keymap;
+    Bool rc = FALSE;
+    XkbKeymapNamesCtx ctx = {
+        .xkb = xkb,
+        .names = names,
+        .want = want,
+        .need = need
+    };
+
+    keymap = RunXkbComp(xkb_write_keymap_for_names_cb, &ctx);
+
+    if (keymap) {
+        if(nameRtrn)
+            strlcpy(nameRtrn, keymap, nameRtrnLen);
+
+        free(keymap);
+        rc = TRUE;
+    } else if (nameRtrn)
+        *nameRtrn = '\0';
+
+    return rc;
+}
+
+typedef struct {
+    const char *keymap;
+    size_t len;
+} XkbKeymapString;
+
+static void
+xkb_write_keymap_string_cb(FILE *out, void *userdata)
+{
+    XkbKeymapString *s = userdata;
+    fwrite(s->keymap, s->len, 1, out);
+}
+
+static unsigned int
+XkbDDXLoadKeymapFromString(DeviceIntPtr keybd,
+                          const char *keymap, int keymap_length,
+                          unsigned int want,
+                          unsigned int need,
+                          XkbDescPtr *xkbRtrn)
+{
+    unsigned int have;
+    char *map_name;
+    XkbKeymapString map = {
+        .keymap = keymap,
+        .len = keymap_length
+    };
+
+    *xkbRtrn = NULL;
+
+    map_name = RunXkbComp(xkb_write_keymap_string_cb, &map);
+    if (!map_name) {
+        LogMessage(X_ERROR, "XKB: Couldn't compile keymap\n");
+        return 0;
+    }
+
+    have = LoadXKM(want, need, map_name, xkbRtrn);
+    free(map_name);
+
+    return have;
 }
 
 static FILE *
-XkbDDXOpenConfigFile(char *mapName, char *fileNameRtrn, int fileNameRtrnLen)
+XkbDDXOpenConfigFile(const char *mapName, char *fileNameRtrn, int fileNameRtrnLen)
 {
     char buf[PATH_MAX], xkm_output_dir[PATH_MAX];
     FILE *file;
@@ -393,6 +334,35 @@ XkbDDXOpenConfigFile(char *mapName, char *fileNameRtrn, int fileNameRtrnLen)
     return file;
 }
 
+static unsigned
+LoadXKM(unsigned want, unsigned need, const char *keymap, XkbDescPtr *xkbRtrn)
+{
+    FILE *file;
+    char fileName[PATH_MAX];
+    unsigned missing;
+
+    file = XkbDDXOpenConfigFile(keymap, fileName, PATH_MAX);
+    if (file == NULL) {
+        LogMessage(X_ERROR, "Couldn't open compiled keymap file %s\n",
+                   fileName);
+        return 0;
+    }
+    missing = XkmReadFile(file, need, want, xkbRtrn);
+    if (*xkbRtrn == NULL) {
+        LogMessage(X_ERROR, "Error loading keymap %s\n", fileName);
+        fclose(file);
+        (void) unlink(fileName);
+        return 0;
+    }
+    else {
+        DebugF("Loaded XKB keymap %s, defined=0x%x\n", fileName,
+               (*xkbRtrn)->defined);
+    }
+    fclose(file);
+    (void) unlink(fileName);
+    return (need | want) & (~missing);
+}
+
 unsigned
 XkbDDXLoadKeymapByNames(DeviceIntPtr keybd,
                         XkbComponentNamesPtr names,
@@ -401,9 +371,6 @@ XkbDDXLoadKeymapByNames(DeviceIntPtr keybd,
                         XkbDescPtr *xkbRtrn, char *nameRtrn, int nameRtrnLen)
 {
     XkbDescPtr xkb;
-    FILE *file;
-    char fileName[PATH_MAX];
-    unsigned missing;
 
     *xkbRtrn = NULL;
     if ((keybd == NULL) || (keybd->key == NULL) ||
@@ -423,30 +390,13 @@ XkbDDXLoadKeymapByNames(DeviceIntPtr keybd,
         LogMessage(X_ERROR, "XKB: Couldn't compile keymap\n");
         return 0;
     }
-    file = XkbDDXOpenConfigFile(nameRtrn, fileName, PATH_MAX);
-    if (file == NULL) {
-        LogMessage(X_ERROR, "Couldn't open compiled keymap file %s\n",
-                   fileName);
-        return 0;
-    }
-    missing = XkmReadFile(file, need, want, xkbRtrn);
-    if (*xkbRtrn == NULL) {
-        LogMessage(X_ERROR, "Error loading keymap %s\n", fileName);
-        fclose(file);
-        (void) unlink(fileName);
-        return 0;
-    }
-    else {
-        DebugF("Loaded XKB keymap %s, defined=0x%x\n", fileName,
-               (*xkbRtrn)->defined);
-    }
-    fclose(file);
-    return (need | want) & (~missing);
+
+    return LoadXKM(want, need, nameRtrn, xkbRtrn);
 }
 
 Bool
 XkbDDXNamesFromRules(DeviceIntPtr keybd,
-                     char *rules_name,
+                     const char *rules_name,
                      XkbRF_VarDefsPtr defs, XkbComponentNamesPtr names)
 {
     char buf[PATH_MAX];
@@ -537,6 +487,29 @@ XkbCompileKeymapForDevice(DeviceIntPtr dev, XkbRMLVOSet * rmlvo, int need)
     return xkb;
 }
 
+static XkbDescPtr
+KeymapOrDefaults(DeviceIntPtr dev, XkbDescPtr xkb)
+{
+    XkbRMLVOSet dflts;
+
+    if (xkb)
+        return xkb;
+
+    /* we didn't get what we really needed. And that will likely leave
+     * us with a keyboard that doesn't work. Use the defaults instead */
+    LogMessage(X_ERROR, "XKB: Failed to load keymap. Loading default "
+                        "keymap instead.\n");
+
+    XkbGetRulesDflts(&dflts);
+
+    xkb = XkbCompileKeymapForDevice(dev, &dflts, 0);
+
+    XkbFreeRMLVOSet(&dflts, FALSE);
+
+    return xkb;
+}
+
+
 XkbDescPtr
 XkbCompileKeymap(DeviceIntPtr dev, XkbRMLVOSet * rmlvo)
 {
@@ -554,20 +527,34 @@ XkbCompileKeymap(DeviceIntPtr dev, XkbRMLVOSet * rmlvo)
 
     xkb = XkbCompileKeymapForDevice(dev, rmlvo, need);
 
-    if (!xkb) {
-        XkbRMLVOSet dflts;
+    return KeymapOrDefaults(dev, xkb);
+}
 
-        /* we didn't get what we really needed. And that will likely leave
-         * us with a keyboard that doesn't work. Use the defaults instead */
-        LogMessage(X_ERROR, "XKB: Failed to load keymap. Loading default "
-                   "keymap instead.\n");
+XkbDescPtr
+XkbCompileKeymapFromString(DeviceIntPtr dev,
+                           const char *keymap, int keymap_length)
+{
+    XkbDescPtr xkb;
+    unsigned int need, provided;
 
-        XkbGetRulesDflts(&dflts);
-
-        xkb = XkbCompileKeymapForDevice(dev, &dflts, 0);
-
-        XkbFreeRMLVOSet(&dflts, FALSE);
+    if (!dev || !keymap) {
+        LogMessage(X_ERROR, "XKB: No device or keymap specified\n");
+        return NULL;
     }
 
-    return xkb;
+    /* These are the components we really really need */
+    need = XkmSymbolsMask | XkmCompatMapMask | XkmTypesMask |
+           XkmKeyNamesMask | XkmVirtualModsMask;
+
+    provided =
+        XkbDDXLoadKeymapFromString(dev, keymap, keymap_length,
+                                   XkmAllIndicesMask, need, &xkb);
+    if ((need & provided) != need) {
+        if (xkb) {
+            XkbFreeKeyboard(xkb, 0, TRUE);
+            xkb = NULL;
+        }
+    }
+
+    return KeymapOrDefaults(dev, xkb);
 }

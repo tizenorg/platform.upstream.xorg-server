@@ -39,7 +39,7 @@
  */
 
 static int
- winAddRgn(WindowPtr pWindow, pointer data);
+ winAddRgn(WindowPtr pWindow, void *data);
 
 static
     void
@@ -59,7 +59,6 @@ winCreateWindowNativeGDI(WindowPtr pWin)
     Bool fResult = TRUE;
     ScreenPtr pScreen = pWin->drawable.pScreen;
 
-    winWindowPriv(pWin);
     winScreenPriv(pScreen);
 
 #if CYGDEBUG
@@ -82,7 +81,6 @@ winDestroyWindowNativeGDI(WindowPtr pWin)
     Bool fResult = TRUE;
     ScreenPtr pScreen = pWin->drawable.pScreen;
 
-    winWindowPriv(pWin);
     winScreenPriv(pScreen);
 
 #if CYGDEBUG
@@ -105,7 +103,6 @@ winPositionWindowNativeGDI(WindowPtr pWin, int x, int y)
     Bool fResult = TRUE;
     ScreenPtr pScreen = pWin->drawable.pScreen;
 
-    winWindowPriv(pWin);
     winScreenPriv(pScreen);
 
 #if CYGDEBUG
@@ -131,7 +128,6 @@ winCopyWindowNativeGDI(WindowPtr pWin, DDXPointRec ptOldOrg, RegionPtr prgnSrc)
     BoxPtr pBox;
     int dx, dy;
     int i, nbox;
-    WindowPtr pwinRoot;
     BoxPtr pBoxDst;
     ScreenPtr pScreen = pWin->drawable.pScreen;
 
@@ -140,9 +136,6 @@ winCopyWindowNativeGDI(WindowPtr pWin, DDXPointRec ptOldOrg, RegionPtr prgnSrc)
 #if 0
     ErrorF("winCopyWindow\n");
 #endif
-
-    /* Get a pointer to the root window */
-    pwinRoot = pWin->drawable.pScreen->root;
 
     /* Create a region for the destination */
     prgnDst = RegionCreate(NULL, 1);
@@ -162,7 +155,7 @@ winCopyWindowNativeGDI(WindowPtr pWin, DDXPointRec ptOldOrg, RegionPtr prgnSrc)
     nbox = RegionNumRects(prgnDst);
 
     /* Allocate source points for each box */
-    if (!(pptSrc = (DDXPointPtr) malloc(nbox * sizeof(DDXPointRec))))
+    if (!(pptSrc = malloc(nbox * sizeof(DDXPointRec))))
         return;
 
     /* Set an iterator pointer */
@@ -210,7 +203,6 @@ winChangeWindowAttributesNativeGDI(WindowPtr pWin, unsigned long mask)
     Bool fResult = TRUE;
     ScreenPtr pScreen = pWin->drawable.pScreen;
 
-    winWindowPriv(pWin);
     winScreenPriv(pScreen);
 
 #if CYGDEBUG
@@ -238,7 +230,6 @@ winUnmapWindowNativeGDI(WindowPtr pWin)
     Bool fResult = TRUE;
     ScreenPtr pScreen = pWin->drawable.pScreen;
 
-    winWindowPriv(pWin);
     winScreenPriv(pScreen);
 
 #if CYGDEBUG
@@ -262,7 +253,6 @@ winMapWindowNativeGDI(WindowPtr pWin)
     Bool fResult = TRUE;
     ScreenPtr pScreen = pWin->drawable.pScreen;
 
-    winWindowPriv(pWin);
     winScreenPriv(pScreen);
 
 #if CYGDEBUG
@@ -466,7 +456,7 @@ winSetShapeRootless(WindowPtr pWin, int kind)
 
 static
     int
-winAddRgn(WindowPtr pWin, pointer data)
+winAddRgn(WindowPtr pWin, void *data)
 {
     int iX, iY, iWidth, iHeight, iBorder;
     HRGN hRgn = *(HRGN *) data;

@@ -195,6 +195,9 @@ LogInit(const char *fname, const char *backup)
     char *logFileName = NULL;
 
     if (fname && *fname) {
+#if __GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__ > 2
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#endif
         if (asprintf(&logFileName, fname, display) == -1)
             FatalError("Cannot allocate space for the log file name\n");
 
@@ -205,6 +208,9 @@ LogInit(const char *fname, const char *backup)
                 char *suffix;
                 char *oldLog;
 
+#if __GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__ > 2
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+#endif
                 if ((asprintf(&suffix, backup, display) == -1) ||
                     (asprintf(&oldLog, "%s%s", logFileName, suffix) == -1))
                     FatalError("Cannot allocate space for the log file name\n");
@@ -215,6 +221,9 @@ LogInit(const char *fname, const char *backup)
                 }
                 free(oldLog);
             }
+        }
+        else {
+            unlink(logFileName);
         }
         if ((logFile = fopen(logFileName, "w")) == NULL)
             FatalError("Cannot open log file \"%s\"\n", logFileName);
@@ -250,7 +259,7 @@ void
 LogClose(enum ExitCode error)
 {
     if (logFile) {
-        ErrorF("Server terminated %s (%d). Closing log file.\n",
+        ErrorFSigSafe("Server terminated %s (%d). Closing log file.\n",
                (error == EXIT_NO_ERROR) ? "successfully" : "with error", error);
         fclose(logFile);
         logFile = NULL;
@@ -279,6 +288,59 @@ LogSetParameter(LogParameter param, int value)
     }
 }
 
+enum {
+    LMOD_LONG     = 0x1,
+    LMOD_LONGLONG = 0x2,
+    LMOD_SHORT    = 0x4,
+    LMOD_SIZET    = 0x8,
+};
+
+/**
+ * Parse non-digit length modifiers and set the corresponding flag in
+ * flags_return.
+ *
+ * @return the number of bytes parsed
+ */
+static int parse_length_modifier(const char *format, size_t len, int *flags_return)
+{
+    int idx = 0;
+    int length_modifier = 0;
+
+    while (idx < len) {
+        switch (format[idx]) {
+            case 'l':
+                BUG_RETURN_VAL(length_modifier & LMOD_SHORT, 0);
+
+                if (length_modifier & LMOD_LONG)
+                    length_modifier |= LMOD_LONGLONG;
+                else
+                    length_modifier |= LMOD_LONG;
+                break;
+            case 'h':
+                BUG_RETURN_VAL(length_modifier & (LMOD_LONG|LMOD_LONGLONG), 0);
+                length_modifier |= LMOD_SHORT;
+                /* gcc says 'short int' is promoted to 'int' when
+                 * passed through '...', so ignored during
+                 * processing */
+                break;
+            case 'z':
+                length_modifier |= LMOD_SIZET;
+                break;
+            default:
+                goto out;
+        }
+        idx++;
+    }
+
+out:
+    *flags_return = length_modifier;
+    return idx;
+}
+
+/**
+ * Signal-safe snprintf, with some limitations over snprintf. Be careful
+ * which directives you use.
+ */
 static int
 pnprintf(char *string, size_t size, const char *f, va_list args)
 {
@@ -293,12 +355,30 @@ pnprintf(char *string, size_t size, const char *f, va_list args)
     int64_t si;
 
     for (; f_idx < f_len && s_idx < size - 1; f_idx++) {
+        int length_modifier = 0;
         if (f[f_idx] != '%') {
             string[s_idx++] = f[f_idx];
             continue;
         }
 
-        switch (f[++f_idx]) {
+        f_idx++;
+
+        /* silently swallow digit length modifiers */
+        while (f_idx < f_len && ((f[f_idx] >= '0' && f[f_idx] <= '9') || f[f_idx] == '.'))
+            f_idx++;
+
+        /* non-digit length modifiers */
+        if (f_idx < f_len) {
+            int parsed_bytes = parse_length_modifier(&f[f_idx], f_len - f_idx, &length_modifier);
+            if (parsed_bytes < 0)
+                return 0;
+            f_idx += parsed_bytes;
+        }
+
+        if (f_idx >= f_len)
+            break;
+
+        switch (f[f_idx]) {
         case 's':
             string_arg = va_arg(args, char*);
             p_len = strlen_sigsafe(string_arg);
@@ -308,7 +388,15 @@ pnprintf(char *string, size_t size, const char *f, va_list args)
             break;
 
         case 'u':
-            ui = va_arg(args, unsigned);
+            if (length_modifier & LMOD_LONGLONG)
+                ui = va_arg(args, unsigned long long);
+            else if (length_modifier & LMOD_LONG)
+                ui = va_arg(args, unsigned long);
+            else if (length_modifier & LMOD_SIZET)
+                ui = va_arg(args, size_t);
+            else
+                ui = va_arg(args, unsigned);
+
             FormatUInt64(ui, number);
             p_len = strlen_sigsafe(number);
 
@@ -317,7 +405,15 @@ pnprintf(char *string, size_t size, const char *f, va_list args)
             break;
         case 'i':
         case 'd':
-            si = va_arg(args, int);
+            if (length_modifier & LMOD_LONGLONG)
+                si = va_arg(args, long long);
+            else if (length_modifier & LMOD_LONG)
+                si = va_arg(args, long);
+            else if (length_modifier & LMOD_SIZET)
+                si = va_arg(args, ssize_t);
+            else
+                si = va_arg(args, int);
+
             FormatInt64(si, number);
             p_len = strlen_sigsafe(number);
 
@@ -338,15 +434,43 @@ pnprintf(char *string, size_t size, const char *f, va_list args)
             break;
 
         case 'x':
-            ui = va_arg(args, unsigned);
+            if (length_modifier & LMOD_LONGLONG)
+                ui = va_arg(args, unsigned long long);
+            else if (length_modifier & LMOD_LONG)
+                ui = va_arg(args, unsigned long);
+            else if (length_modifier & LMOD_SIZET)
+                ui = va_arg(args, size_t);
+            else
+                ui = va_arg(args, unsigned);
+
             FormatUInt64Hex(ui, number);
             p_len = strlen_sigsafe(number);
 
             for (i = 0; i < p_len && s_idx < size - 1; i++)
                 string[s_idx++] = number[i];
             break;
+        case 'f':
+            {
+                double d = va_arg(args, double);
+                FormatDouble(d, number);
+                p_len = strlen_sigsafe(number);
 
+                for (i = 0; i < p_len && s_idx < size - 1; i++)
+                    string[s_idx++] = number[i];
+            }
+            break;
+        case 'c':
+            {
+                char c = va_arg(args, int);
+                if (s_idx < size - 1)
+                    string[s_idx++] = c;
+            }
+            break;
+        case '%':
+            string[s_idx++] = '%';
+            break;
         default:
+            BUG_WARN_MSG(f[f_idx], "Unsupported printf directive '%c'\n", f[f_idx]);
             va_arg(args, char*);
             string[s_idx++] = '%';
             if (s_idx < size - 1)
@@ -648,7 +772,7 @@ AbortServer(void)
 #endif
     CloseWellKnownConnections();
     OsCleanup(TRUE);
-    CloseDownDevices();
+    AbortDevices();
     AbortDDX(EXIT_ERR_ABORT);
     fflush(stderr);
     if (CoreDump)
@@ -708,7 +832,7 @@ AuditF(const char *f, ...)
 }
 
 static CARD32
-AuditFlush(OsTimerPtr timer, CARD32 now, pointer arg)
+AuditFlush(OsTimerPtr timer, CARD32 now, void *arg)
 {
     char *prefix;
 
@@ -763,9 +887,9 @@ FatalError(const char *f, ...)
     static Bool beenhere = FALSE;
 
     if (beenhere)
-        ErrorF("\nFatalError re-entered, aborting\n");
+        ErrorFSigSafe("\nFatalError re-entered, aborting\n");
     else
-        ErrorF("\nFatal server error:\n");
+        ErrorFSigSafe("\nFatal server error:\n");
 
     va_start(args, f);
 
@@ -782,9 +906,9 @@ FatalError(const char *f, ...)
         va_end(apple_args);
     }
 #endif
-    VErrorF(f, args);
+    VErrorFSigSafe(f, args);
     va_end(args);
-    ErrorF("\n");
+    ErrorFSigSafe("\n");
     if (!beenhere)
         OsVendorFatalError(f, args2);
     va_end(args2);

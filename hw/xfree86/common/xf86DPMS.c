@@ -36,6 +36,7 @@
 #include <X11/X.h>
 #include "os.h"
 #include "globals.h"
+#include "windowstr.h"
 #include "xf86.h"
 #include "xf86Priv.h"
 #ifdef DPMSExtension
@@ -59,7 +60,7 @@ xf86DPMSInit(ScreenPtr pScreen, DPMSSetProcPtr set, int flags)
 #ifdef DPMSExtension
     ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     DPMSPtr pDPMS;
-    pointer DPMSOpt;
+    void *DPMSOpt;
     MessageType enabled_from;
 
     DPMSKey = &DPMSKeyRec;
@@ -130,6 +131,19 @@ DPMSClose(ScreenPtr pScreen)
     return pScreen->CloseScreen(pScreen);
 }
 
+static void
+DPMSSetScreen(ScrnInfoPtr pScrn, int level)
+{
+    ScreenPtr pScreen = xf86ScrnToScreen(pScrn);
+    DPMSPtr pDPMS = dixLookupPrivate(&pScreen->devPrivates, DPMSKey);
+
+    if (pDPMS && pScrn->DPMSSet && pDPMS->Enabled && pScrn->vtSema) {
+        xf86VGAarbiterLock(pScrn);
+        pScrn->DPMSSet(pScrn, level, 0);
+        xf86VGAarbiterUnlock(pScrn);
+    }
+}
+
 /*
  * DPMSSet --
  *	Device dependent DPMS mode setting hook.  This is called whenever
@@ -139,8 +153,6 @@ int
 DPMSSet(ClientPtr client, int level)
 {
     int rc, i;
-    DPMSPtr pDPMS;
-    ScrnInfoPtr pScrn;
 
     DPMSPowerLevel = level;
 
@@ -148,22 +160,34 @@ DPMSSet(ClientPtr client, int level)
         return Success;
 
     if (level != DPMSModeOn) {
-        rc = dixSaveScreens(client, SCREEN_SAVER_FORCER, ScreenSaverActive);
+        if (xf86IsUnblank(screenIsSaved)) {
+            rc = dixSaveScreens(client, SCREEN_SAVER_FORCER, ScreenSaverActive);
+            if (rc != Success)
+                return rc;
+        }
+    } else if (!xf86IsUnblank(screenIsSaved)) {
+        rc = dixSaveScreens(client, SCREEN_SAVER_FORCER, ScreenSaverReset);
         if (rc != Success)
             return rc;
     }
 
     /* For each screen, set the DPMS level */
     for (i = 0; i < xf86NumScreens; i++) {
-        pScrn = xf86Screens[i];
-        pDPMS = dixLookupPrivate(&screenInfo.screens[i]->devPrivates, DPMSKey);
-        if (pDPMS && pScrn->DPMSSet && pDPMS->Enabled && pScrn->vtSema) {
-            xf86VGAarbiterLock(pScrn);
-            pScrn->DPMSSet(pScrn, level, 0);
-            xf86VGAarbiterUnlock(pScrn);
-        }
+        DPMSSetScreen(xf86Screens[i], level);
+    }
+    for (i = 0; i < xf86NumGPUScreens; i++) {
+        DPMSSetScreen(xf86GPUScreens[i], level);
     }
     return Success;
+}
+
+static Bool
+DPMSSupportedOnScreen(ScrnInfoPtr pScrn)
+{
+    ScreenPtr pScreen = xf86ScrnToScreen(pScrn);
+    DPMSPtr pDPMS = dixLookupPrivate(&pScreen->devPrivates, DPMSKey);
+
+    return pDPMS && pScrn->DPMSSet;
 }
 
 /*
@@ -174,8 +198,6 @@ Bool
 DPMSSupported(void)
 {
     int i;
-    DPMSPtr pDPMS;
-    ScrnInfoPtr pScrn;
 
     if (DPMSKey == NULL) {
         return FALSE;
@@ -183,9 +205,11 @@ DPMSSupported(void)
 
     /* For each screen, check if DPMS is supported */
     for (i = 0; i < xf86NumScreens; i++) {
-        pScrn = xf86Screens[i];
-        pDPMS = dixLookupPrivate(&screenInfo.screens[i]->devPrivates, DPMSKey);
-        if (pDPMS && pScrn->DPMSSet)
+        if (DPMSSupportedOnScreen(xf86Screens[i]))
+            return TRUE;
+    }
+    for (i = 0; i < xf86NumGPUScreens; i++) {
+        if (DPMSSupportedOnScreen(xf86GPUScreens[i]))
             return TRUE;
     }
     return FALSE;

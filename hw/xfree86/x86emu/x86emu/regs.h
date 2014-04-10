@@ -39,6 +39,8 @@
 #ifndef __X86EMU_REGS_H
 #define __X86EMU_REGS_H
 
+#include <X11/Xfuncproto.h>
+
 /*---------------------- Macros and type definitions ----------------------*/
 
 #ifdef PACK
@@ -111,6 +113,15 @@ struct i386_special_regs {
  * Segment registers here represent the 16 bit quantities
  * CS, DS, ES, SS.
  */
+
+#if defined(__sun) && defined(CS) /* avoid conflicts with Solaris sys/regset.h */
+# undef CS
+# undef DS
+# undef SS
+# undef ES
+# undef FS
+# undef GS
+#endif
 
 struct i386_segment_regs {
     u16 CS, DS, SS, ES, FS, GS;
@@ -328,7 +339,8 @@ extern "C" {                    /* Use "C" linkage when in C++ mode */
 
 /* Function to log information at runtime */
 
-    void printk(const char *fmt, ...);
+    void printk(const char *fmt, ...)
+        _X_ATTRIBUTE_PRINTF(1, 2);
 
 #ifdef  __cplusplus
 }                               /* End of "C" linkage for C++           */

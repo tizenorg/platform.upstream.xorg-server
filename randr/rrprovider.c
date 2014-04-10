@@ -304,6 +304,9 @@ ProcRRSetProviderOutputSource(ClientPtr client)
 
     pScrPriv->rrProviderSetOutputSource(pScreen, provider, source_provider);
 
+    provider->changed = TRUE;
+    RRSetChanged(pScreen);
+
     RRTellChanged (pScreen);
 
     return Success;
@@ -333,6 +336,9 @@ ProcRRSetProviderOffloadSink(ClientPtr client)
 
     pScrPriv->rrProviderSetOffloadSink(pScreen, provider, sink_provider);
 
+    provider->changed = TRUE;
+    RRSetChanged(pScreen);
+
     RRTellChanged (pScreen);
 
     return Success;
@@ -357,8 +363,9 @@ RRProviderCreate(ScreenPtr pScreen, const char *name,
     provider->nameLength = nameLength;
     memcpy(provider->name, name, nameLength);
     provider->name[nameLength] = '\0';
+    provider->changed = FALSE;
 
-    if (!AddResource (provider->id, RRProviderType, (pointer) provider))
+    if (!AddResource (provider->id, RRProviderType, (void *) provider))
         return NULL;
     pScrPriv->provider = provider;
     return provider;
@@ -380,7 +387,7 @@ RRProviderSetCapabilities(RRProviderPtr provider, uint32_t capabilities)
 }
 
 static int
-RRProviderDestroyResource (pointer value, XID pid)
+RRProviderDestroyResource (void *value, XID pid)
 {
     RRProviderPtr provider = (RRProviderPtr)value;
     ScreenPtr pScreen = provider->pScreen;
@@ -415,4 +422,22 @@ RRProviderLookup(XID id, RRProviderPtr *provider_p)
     if (rc == Success)
         return TRUE;
     return FALSE;
+}
+
+void
+RRDeliverProviderEvent(ClientPtr client, WindowPtr pWin, RRProviderPtr provider)
+{
+    ScreenPtr pScreen = pWin->drawable.pScreen;
+
+    rrScrPriv(pScreen);
+
+    xRRProviderChangeNotifyEvent pe = {
+        .type = RRNotify + RREventBase,
+        .subCode = RRNotify_ProviderChange,
+        .timestamp = pScrPriv->lastSetTime.milliseconds,
+        .window = pWin->drawable.id,
+        .provider = provider->id
+    };
+
+    WriteEventsToClient(client, 1, (xEvent *) &pe);
 }

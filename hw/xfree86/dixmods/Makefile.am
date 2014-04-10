@@ -12,19 +12,19 @@ extsmoduledir = $(moduledir)/extensions
 extsmodule_LTLIBRARIES = $(GLXMODS)
 
 AM_CFLAGS = @XORG_CFLAGS@ @DIX_CFLAGS@
-INCLUDES = @XORG_INCS@ \
+AM_CPPFLAGS = @XORG_INCS@ \
            -I$(top_srcdir)/hw/xfree86/loader \
            -I$(top_srcdir)/miext/shadow \
            -I$(top_srcdir)/glx
 
 libfb_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
 libfb_la_LIBADD = $(top_builddir)/fb/libfb.la
-libfb_la_SOURCES = $(top_builddir)/fb/fbcmap_mi.c fbmodule.c
+libfb_la_SOURCES = fbmodule.c
 libfb_la_CFLAGS = $(AM_CFLAGS)
 
 libwfb_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
 libwfb_la_LIBADD = $(top_builddir)/fb/libwfb.la
-libwfb_la_SOURCES = $(top_builddir)/fb/fbcmap_mi.c fbmodule.c
+libwfb_la_SOURCES = fbmodule.c
 libwfb_la_CFLAGS = $(AM_CFLAGS) -DFB_ACCESS_WRAPPER
 
 libglx_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
@@ -32,7 +32,7 @@ libglx_la_LIBADD = $(top_builddir)/glx/libglx.la $(GLX_SYS_LIBS)
 if AIGLX_DRI_LOADER
 libglx_la_LIBADD += $(top_builddir)/glx/libglxdri.la
 if NO_UNDEFINED
-libglx_la_LIBADD += ../dri/libdri.la ../dri2/libdri2.la
+libglx_la_LIBADD += $(LIBDRM_LIBS) $(PIXMAN_LIBS)
 endif
 endif
 libglx_la_SOURCES = glxmodule.c

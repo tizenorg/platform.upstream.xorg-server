@@ -47,10 +47,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 static MODULESETUPPROTO(glxSetup);
 
-static ExtensionModule GLXExt = {
-    GlxExtensionInit,
-    "GLX",
-    &noGlxExtension
+static const ExtensionModule GLXExt[] = {
+    { GlxExtensionInit, "GLX", &noGlxExtension },
 };
 
 static XF86ModuleVersionInfo VersRec = {
@@ -68,8 +66,8 @@ static XF86ModuleVersionInfo VersRec = {
 
 _X_EXPORT XF86ModuleData glxModuleData = { &VersRec, glxSetup, NULL };
 
-static pointer
-glxSetup(pointer module, pointer opts, int *errmaj, int *errmin)
+static void *
+glxSetup(void *module, void *opts, int *errmaj, int *errmin)
 {
     static Bool setupDone = FALSE;
     __GLXprovider *provider;
@@ -85,15 +83,12 @@ glxSetup(pointer module, pointer opts, int *errmaj, int *errmin)
     xf86Msg(xf86Info.aiglxFrom, "AIGLX %s\n",
             xf86Info.aiglx ? "enabled" : "disabled");
     if (xf86Info.aiglx) {
-        provider = LoaderSymbol("__glXDRIProvider");
-        if (provider)
-            GlxPushProvider(provider);
         provider = LoaderSymbol("__glXDRI2Provider");
         if (provider)
             GlxPushProvider(provider);
     }
 
-    LoadExtension(&GLXExt, FALSE);
+    LoadExtensionList(GLXExt, ARRAY_SIZE(GLXExt), FALSE);
 
     return module;
 }

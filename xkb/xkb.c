@@ -57,10 +57,10 @@ static RESTYPE RT_XKBCLIENT;
 
 #define	CHK_DEVICE(dev, id, client, access_mode, lf) {\
     int why;\
-    int rc = lf(&(dev), id, client, access_mode, &why);\
-    if (rc != Success) {\
+    int tmprc = lf(&(dev), id, client, access_mode, &why);\
+    if (tmprc != Success) {\
 	client->errorValue = _XkbErrCode2(why, id);\
-	return rc;\
+	return tmprc;\
     }\
 }
 
@@ -370,7 +370,7 @@ _XkbBell(ClientPtr client, DeviceIntPtr dev, WindowPtr pWin,
          int percent, int forceSound, int eventOnly, Atom name)
 {
     int base;
-    pointer ctrl;
+    void *ctrl;
     int oldPitch, oldDuration;
     int newPercent;
 
@@ -390,7 +390,7 @@ _XkbBell(ClientPtr client, DeviceIntPtr dev, WindowPtr pWin,
             return BadValue;
         }
         base = k->ctrl.bell;
-        ctrl = (pointer) &(k->ctrl);
+        ctrl = (void *) &(k->ctrl);
         oldPitch = k->ctrl.bell_pitch;
         oldDuration = k->ctrl.bell_duration;
         if (pitch != 0) {
@@ -422,7 +422,7 @@ _XkbBell(ClientPtr client, DeviceIntPtr dev, WindowPtr pWin,
             return BadValue;
         }
         base = b->ctrl.percent;
-        ctrl = (pointer) &(b->ctrl);
+        ctrl = (void *) &(b->ctrl);
         oldPitch = b->ctrl.pitch;
         oldDuration = b->ctrl.duration;
         if (pitch != 0) {
@@ -1026,22 +1026,22 @@ XkbWriteKeyTypes(XkbDescPtr xkb,
 
         buf = (char *) &wire[1];
         if (wire->nMapEntries > 0) {
-            xkbKTMapEntryWireDesc *wire;
+            xkbKTMapEntryWireDesc *ewire;
             XkbKTMapEntryPtr entry;
 
-            wire = (xkbKTMapEntryWireDesc *) buf;
+            ewire = (xkbKTMapEntryWireDesc *) buf;
             entry = type->map;
-            for (n = 0; n < type->map_count; n++, wire++, entry++) {
-                wire->active = entry->active;
-                wire->mask = entry->mods.mask;
-                wire->level = entry->level;
-                wire->realMods = entry->mods.real_mods;
-                wire->virtualMods = entry->mods.vmods;
+            for (n = 0; n < type->map_count; n++, ewire++, entry++) {
+                ewire->active = entry->active;
+                ewire->mask = entry->mods.mask;
+                ewire->level = entry->level;
+                ewire->realMods = entry->mods.real_mods;
+                ewire->virtualMods = entry->mods.vmods;
                 if (client->swapped) {
-                    swaps(&wire->virtualMods);
+                    swaps(&ewire->virtualMods);
                 }
             }
-            buf = (char *) wire;
+            buf = (char *) ewire;
             if (type->preserve != NULL) {
                 xkbModsWireDesc *pwire;
                 XkbModsPtr preserve;
@@ -1650,8 +1650,8 @@ CheckKeyTypes(ClientPtr client,
             xkbKTSetMapEntryWireDesc *mapWire;
             xkbModsWireDesc *preWire;
 
-            mapWire = (xkbKTSetMapEntryWireDesc *) & wire[1];
-            preWire = (xkbModsWireDesc *) & mapWire[wire->nMapEntries];
+            mapWire = (xkbKTSetMapEntryWireDesc *) &wire[1];
+            preWire = (xkbModsWireDesc *) &mapWire[wire->nMapEntries];
             for (n = 0; n < wire->nMapEntries; n++) {
                 if (client->swapped) {
                     swaps(&mapWire[n].virtualMods);
@@ -1761,8 +1761,8 @@ CheckKeySyms(ClientPtr client,
             *errorRtrn = _XkbErrCode3(0x17, i + req->firstKeySym, wire->nSyms);
             return 0;
         }
-        pSyms = (KeySym *) & wire[1];
-        wire = (xkbSymMapWireDesc *) & pSyms[wire->nSyms];
+        pSyms = (KeySym *) &wire[1];
+        wire = (xkbSymMapWireDesc *) &pSyms[wire->nSyms];
     }
 
     map = &xkb->map->key_sym_map[i];
@@ -2039,7 +2039,7 @@ SetKeyTypes(XkbDescPtr xkb,
             unsigned tmp;
 
             mapWire = (xkbKTSetMapEntryWireDesc *) map;
-            preWire = (xkbModsWireDesc *) & mapWire[wire->nMapEntries];
+            preWire = (xkbModsWireDesc *) &mapWire[wire->nMapEntries];
             for (n = 0; n < wire->nMapEntries; n++) {
                 pOld->map[n].active = 1;
                 pOld->map[n].mods.mask = mapWire[n].realMods;
@@ -2098,7 +2098,7 @@ SetKeySyms(ClientPtr client,
 
     oldMap = &xkb->map->key_sym_map[req->firstKeySym];
     for (i = 0; i < req->nKeySyms; i++, oldMap++) {
-        pSyms = (KeySym *) & wire[1];
+        pSyms = (KeySym *) &wire[1];
         if (wire->nSyms > 0) {
             newSyms = XkbResizeKeySyms(xkb, i + req->firstKeySym, wire->nSyms);
             for (s = 0; s < wire->nSyms; s++) {
@@ -2116,7 +2116,7 @@ SetKeySyms(ClientPtr client,
         oldMap->kt_index[3] = wire->ktIndex[3];
         oldMap->group_info = wire->groupInfo;
         oldMap->width = wire->width;
-        wire = (xkbSymMapWireDesc *) & pSyms[wire->nSyms];
+        wire = (xkbSymMapWireDesc *) &pSyms[wire->nSyms];
     }
     first = req->firstKeySym;
     last = first + req->nKeySyms - 1;
@@ -2408,7 +2408,7 @@ _XkbSetMapChecks(ClientPtr client, DeviceIntPtr dev, xkbSetMapReq * req,
     }
 
     if ((req->present & XkbKeyTypesMask) &&
-        (!CheckKeyTypes(client, xkb, req, (xkbKeyTypeWireDesc **) & values,
+        (!CheckKeyTypes(client, xkb, req, (xkbKeyTypeWireDesc **) &values,
                         &nTypes, mapWidths))) {
         client->errorValue = nTypes;
         return BadValue;
@@ -2433,7 +2433,7 @@ _XkbSetMapChecks(ClientPtr client, DeviceIntPtr dev, xkbSetMapReq * req,
 
     if ((req->present & XkbKeySymsMask) &&
         (!CheckKeySyms(client, xkb, req, nTypes, mapWidths, symsPerKey,
-                       (xkbSymMapWireDesc **) & values, &error))) {
+                       (xkbSymMapWireDesc **) &values, &error))) {
         client->errorValue = error;
         return BadValue;
     }
@@ -2447,7 +2447,7 @@ _XkbSetMapChecks(ClientPtr client, DeviceIntPtr dev, xkbSetMapReq * req,
 
     if ((req->present & XkbKeyBehaviorsMask) &&
         (!CheckKeyBehaviors
-         (xkb, req, (xkbBehaviorWireDesc **) & values, &error))) {
+         (xkb, req, (xkbBehaviorWireDesc **) &values, &error))) {
         client->errorValue = error;
         return BadValue;
     }
@@ -2469,7 +2469,7 @@ _XkbSetMapChecks(ClientPtr client, DeviceIntPtr dev, xkbSetMapReq * req,
     }
     if ((req->present & XkbVirtualModMapMask) &&
         (!CheckVirtualModMap
-         (xkb, req, (xkbVModMapWireDesc **) & values, &error))) {
+         (xkb, req, (xkbVModMapWireDesc **) &values, &error))) {
         client->errorValue = error;
         return BadValue;
     }
@@ -2903,7 +2903,6 @@ _XkbSetCompatMap(ClientPtr client, DeviceIntPtr dev,
     }
 
     if (req->groups != 0) {
-        unsigned i, bit;
         xkbModsWireDesc *wire = (xkbModsWireDesc *) data;
 
         for (i = 0, bit = 1; i < XkbNumKbdGroups; i++, bit <<= 1) {
@@ -3074,6 +3073,7 @@ XkbComputeGetIndicatorMapReplySize(XkbIndicatorPtr indicators,
             nIndicators++;
     }
     rep->length = (nIndicators * SIZEOF(xkbIndicatorMapWireDesc)) / 4;
+    rep->nIndicators = nIndicators;
     return Success;
 }
 
@@ -3985,13 +3985,11 @@ _XkbSetNamesCheck(ClientPtr client, DeviceIntPtr dev,
                   xkbSetNamesReq * stuff, CARD32 *data)
 {
     XkbDescRec *xkb;
-    XkbNamesRec *names;
     CARD32 *tmp;
     Atom bad;
 
     tmp = data;
     xkb = dev->key->xkbInfo->desc;
-    names = xkb->names;
 
     if (stuff->which & XkbKeyTypeNamesMask) {
         int i;
@@ -4421,7 +4419,7 @@ ProcXkbSetNames(ClientPtr client)
  * (swapped) 16 bit string length, non-zero terminated.
  */
 static char *
-XkbWriteCountedString(char *wire, char *str, Bool swap)
+XkbWriteCountedString(char *wire, const char *str, Bool swap)
 {
     CARD16 len, *pLen, paddedLen;
 
@@ -5098,7 +5096,7 @@ _CheckSetOverlay(char **wire_inout,
     }
     CHK_ATOM_ONLY(olWire->name);
     ol = XkbAddGeomOverlay(section, olWire->name, olWire->nRows);
-    rWire = (xkbOverlayRowWireDesc *) & olWire[1];
+    rWire = (xkbOverlayRowWireDesc *) &olWire[1];
     for (r = 0; r < olWire->nRows; r++) {
         register int k;
         xkbOverlayKeyWireDesc *kWire;
@@ -5110,7 +5108,7 @@ _CheckSetOverlay(char **wire_inout,
             return BadMatch;
         }
         row = XkbAddGeomOverlayRow(ol, rWire->rowUnder, rWire->nKeys);
-        kWire = (xkbOverlayKeyWireDesc *) & rWire[1];
+        kWire = (xkbOverlayKeyWireDesc *) &rWire[1];
         for (k = 0; k < rWire->nKeys; k++, kWire++) {
             if (XkbAddGeomOverlayKey(ol, row,
                                      (char *) kWire->over,
@@ -5164,7 +5162,7 @@ _CheckSetSections(XkbGeometryPtr geom,
         section->width = sWire->width;
         section->height = sWire->height;
         section->angle = sWire->angle;
-        rWire = (xkbRowWireDesc *) & sWire[1];
+        rWire = (xkbRowWireDesc *) &sWire[1];
         for (r = 0; r < sWire->nRows; r++) {
             register int k;
             XkbRowPtr row;
@@ -5180,7 +5178,7 @@ _CheckSetSections(XkbGeometryPtr geom,
             row->top = rWire->top;
             row->left = rWire->left;
             row->vertical = rWire->vertical;
-            kWire = (xkbKeyWireDesc *) & rWire[1];
+            kWire = (xkbKeyWireDesc *) &rWire[1];
             for (k = 0; k < rWire->nKeys; k++) {
                 XkbKeyPtr key;
 
@@ -5202,7 +5200,7 @@ _CheckSetSections(XkbGeometryPtr geom,
                     return BadMatch;
                 }
             }
-            rWire = (xkbRowWireDesc *) & kWire[rWire->nKeys];
+            rWire = (xkbRowWireDesc *) &kWire[rWire->nKeys];
         }
         wire = (char *) rWire;
         if (sWire->nDoodads > 0) {
@@ -5266,7 +5264,7 @@ _CheckSetShapes(XkbGeometryPtr geom,
                 if (!ol)
                     return BadAlloc;
                 ol->corner_radius = olWire->cornerRadius;
-                ptWire = (xkbPointWireDesc *) & olWire[1];
+                ptWire = (xkbPointWireDesc *) &olWire[1];
                 for (p = 0, pt = ol->points; p < olWire->nPoints; p++, pt++) {
                     pt->x = ptWire[p].x;
                     pt->y = ptWire[p].y;
@@ -5621,9 +5619,9 @@ ProcXkbListComponents(ClientPtr client)
     DeviceIntPtr dev;
     xkbListComponentsReply rep;
     unsigned len;
-    int status;
     unsigned char *str;
-    XkbSrvListInfoRec list;
+    uint8_t size;
+    int i;
 
     REQUEST(xkbListComponentsReq);
     REQUEST_AT_LEAST_SIZE(xkbListComponentsReq);
@@ -5633,40 +5631,33 @@ ProcXkbListComponents(ClientPtr client)
 
     CHK_KBD_DEVICE(dev, stuff->deviceSpec, client, DixGetAttrAccess);
 
-    status = Success;
+    /* The request is followed by six Pascal strings (i.e. size in characters
+     * followed by a string pattern) describing what the client wants us to
+     * list.  We don't care, but might as well check they haven't got the
+     * length wrong. */
     str = (unsigned char *) &stuff[1];
-    memset(&list, 0, sizeof(XkbSrvListInfoRec));
-    list.maxRtrn = stuff->maxNames;
-    list.pattern[_XkbListKeycodes] = GetComponentSpec(&str, FALSE, &status);
-    list.pattern[_XkbListTypes] = GetComponentSpec(&str, FALSE, &status);
-    list.pattern[_XkbListCompat] = GetComponentSpec(&str, FALSE, &status);
-    list.pattern[_XkbListSymbols] = GetComponentSpec(&str, FALSE, &status);
-    list.pattern[_XkbListGeometry] = GetComponentSpec(&str, FALSE, &status);
-    if (status != Success)
-        return status;
-    len = str - ((unsigned char *) stuff);
+    for (i = 0; i < 6; i++) {
+        size = *((uint8_t *)str);
+        len = (str + size + 1) - ((unsigned char *) stuff);
+        if ((XkbPaddedSize(len) / 4) > stuff->length)
+            return BadLength;
+        str += (size + 1);
+    }
     if ((XkbPaddedSize(len) / 4) != stuff->length)
         return BadLength;
-    if ((status = XkbDDXList(dev, &list, client)) != Success) {
-        free(list.pool);
-        list.pool = NULL;
-        return status;
-    }
     rep = (xkbListComponentsReply) {
         .type = X_Reply,
         .deviceID = dev->id,
         .sequenceNumber = client->sequence,
-        .length = XkbPaddedSize(list.nPool) / 4,
+        .length = 0,
         .nKeymaps = 0,
-        .nKeycodes = list.nFound[_XkbListKeycodes],
-        .nTypes = list.nFound[_XkbListTypes],
-        .nCompatMaps = list.nFound[_XkbListCompat],
-        .nSymbols = list.nFound[_XkbListSymbols],
-        .nGeometries = list.nFound[_XkbListGeometry],
+        .nKeycodes = 0,
+        .nTypes = 0,
+        .nCompatMaps = 0,
+        .nSymbols = 0,
+        .nGeometries = 0,
         .extra = 0
     };
-    if (list.nTotal > list.maxRtrn)
-        rep.extra = (list.nTotal - list.maxRtrn);
     if (client->swapped) {
         swaps(&rep.sequenceNumber);
         swapl(&rep.length);
@@ -5679,11 +5670,6 @@ ProcXkbListComponents(ClientPtr client)
         swaps(&rep.extra);
     }
     WriteToClient(client, SIZEOF(xkbListComponentsReply), &rep);
-    if (list.nPool && list.pool) {
-        WriteToClient(client, XkbPaddedSize(list.nPool), list.pool);
-        free(list.pool);
-        list.pool = NULL;
-    }
     return Success;
 }
 
@@ -5964,25 +5950,13 @@ ProcXkbGetKbdByName(ClientPtr client)
     if (rep.loaded) {
         XkbDescPtr old_xkb;
         xkbNewKeyboardNotify nkn;
-        int i, nG, nTG;
 
         old_xkb = xkb;
         xkb = new;
         dev->key->xkbInfo->desc = xkb;
         new = old_xkb;          /* so it'll get freed automatically */
 
-        *xkb->ctrls = *old_xkb->ctrls;
-        for (nG = nTG = 0, i = xkb->min_key_code; i <= xkb->max_key_code; i++) {
-            nG = XkbKeyNumGroups(xkb, i);
-            if (nG >= XkbNumKbdGroups) {
-                nTG = XkbNumKbdGroups;
-                break;
-            }
-            if (nG > nTG) {
-                nTG = nG;
-            }
-        }
-        xkb->ctrls->num_groups = nTG;
+        XkbCopyControls(xkb, old_xkb);
 
         nkn.deviceID = nkn.oldDeviceID = dev->id;
         nkn.minKeyCode = new->min_key_code;
@@ -6005,7 +5979,7 @@ ProcXkbGetKbdByName(ClientPtr client)
                 continue;
 
             if (tmpd != dev)
-                XkbCopyDeviceKeymap(tmpd, dev);
+                XkbDeviceApplyKeymap(tmpd, xkb);
 
             if (tmpd->kbdfeed && tmpd->kbdfeed->xkb_sli) {
                 old_sli = tmpd->kbdfeed->xkb_sli;
@@ -6361,7 +6335,7 @@ ProcXkbGetDeviceInfo(ClientPtr client)
         xkbActionWireDesc *awire;
 
         sz = rep.nBtnsRtrn * SIZEOF(xkbActionWireDesc);
-        awire = (xkbActionWireDesc *) & dev->button->xkb_acts[rep.firstBtnRtrn];
+        awire = (xkbActionWireDesc *) &dev->button->xkb_acts[rep.firstBtnRtrn];
         WriteToClient(client, sz, awire);
         length -= sz;
     }
@@ -6834,7 +6808,7 @@ ProcXkbDispatch(ClientPtr client)
 }
 
 static int
-XkbClientGone(pointer data, XID id)
+XkbClientGone(void *data, XID id)
 {
     DevicePtr pXDev = (DevicePtr) data;
 

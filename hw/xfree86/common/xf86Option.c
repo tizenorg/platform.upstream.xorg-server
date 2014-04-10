@@ -276,7 +276,7 @@ xf86CheckRealOption(XF86OptionPtr optlist, const char *name, double deflt)
 }
 
 char *
-xf86CheckStrOption(XF86OptionPtr optlist, const char *name, char *deflt)
+xf86CheckStrOption(XF86OptionPtr optlist, const char *name, const char *deflt)
 {
     return LookupStrOption(optlist, name, deflt, FALSE);
 }
@@ -478,7 +478,8 @@ static Bool
 ParseOptionValue(int scrnIndex, XF86OptionPtr options, OptionInfoPtr p,
                  Bool markUsed)
 {
-    char *s, *end;
+    const char *s;
+    char *end;
     Bool wasUsed = FALSE;
 
     if ((s = xf86findOptionValue(options, p->name)) != NULL) {
@@ -515,7 +516,7 @@ ParseOptionValue(int scrnIndex, XF86OptionPtr options, OptionInfoPtr p,
             if (*s == '\0') {
                 if (markUsed) {
                     xf86DrvMsg(scrnIndex, X_WARNING,
-                               "Option \"%s\" requires an string value\n",
+                               "Option \"%s\" requires a string value\n",
                                p->name);
                 }
                 p->found = FALSE;
@@ -743,7 +744,7 @@ xf86TokenToOptName(const OptionInfoRec * table, int token)
     const OptionInfoRec *p;
 
     p = xf86TokenToOptinfo(table, token);
-    return p->name;
+    return p ? p->name : NULL;
 }
 
 Bool
@@ -755,7 +756,7 @@ xf86IsOptionSet(const OptionInfoRec * table, int token)
     return p && p->found;
 }
 
-char *
+const char *
 xf86GetOptValString(const OptionInfoRec * table, int token)
 {
     OptionInfoPtr p;

@@ -109,11 +109,14 @@ Bool
 QuartzAddScreen(int index,
                 ScreenPtr pScreen)
 {
+    // The clang static analyzer thinks we leak displayInfo here
+#ifndef __clang_analyzer__
     // allocate space for private per screen Quartz specific storage
     QuartzScreenPtr displayInfo = calloc(sizeof(QuartzScreenRec), 1);
 
     // QUARTZ_PRIV(pScreen) = displayInfo;
     dixSetPrivate(&pScreen->devPrivates, quartzScreenKey, displayInfo);
+#endif /* __clang_analyzer__ */
 
     // do Quartz mode specific initialization
     return quartzProcs->AddScreen(index, pScreen);
@@ -145,7 +148,7 @@ QuartzSetupScreen(int index,
     return TRUE;
 }
 
-static ExtensionModule quartzExtensions[] = {
+static const ExtensionModule quartzExtensions[] = {
     /* PseudoramiX needs to be done before RandR, so
      * it is in miinitext.c until it can be reordered.
      * { PseudoramiXExtensionInit, "PseudoramiX", &noPseudoramiXExtension },
@@ -161,10 +164,7 @@ static ExtensionModule quartzExtensions[] = {
  */
 static void QuartzExtensionInit(void)
 {
-    int i;
-
-    for (i = 0; i < ARRAY_SIZE(quartzExtensions); i++)
-        LoadExtension(&quartzExtensions[i], TRUE);
+    LoadExtensionList(quartzExtensions, ARRAY_SIZE(quartzExtensions), TRUE);
 }
 
 /*

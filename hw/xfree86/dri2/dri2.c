@@ -99,7 +99,6 @@ typedef struct _DRI2Drawable {
     CARD64 last_swap_msc;       /* msc at completion of most recent swap */
     CARD64 last_swap_ust;       /* ust at completion of most recent swap */
     int swap_limit;             /* for N-buffering */
-    unsigned long serialNumber;
     Bool needInvalidate;
     int prime_id;
     PixmapPtr prime_slave_pixmap;
@@ -194,19 +193,6 @@ DRI2GetDrawable(DrawablePtr pDraw)
     }
 }
 
-static unsigned long
-DRI2DrawableSerial(DrawablePtr pDraw)
-{
-    ScreenPtr pScreen = pDraw->pScreen;
-    PixmapPtr pPix;
-
-    if (pDraw->type != DRAWABLE_WINDOW)
-        return pDraw->serialNumber;
-
-    pPix = pScreen->GetWindowPixmap((WindowPtr) pDraw);
-    return pPix->drawable.serialNumber;
-}
-
 static DRI2DrawablePtr
 DRI2AllocateDrawable(DrawablePtr pDraw)
 {
@@ -240,7 +226,6 @@ DRI2AllocateDrawable(DrawablePtr pDraw)
     pPriv->last_swap_msc = 0;
     pPriv->last_swap_ust = 0;
     xorg_list_init(&pPriv->reference_list);
-    pPriv->serialNumber = DRI2DrawableSerial(pDraw);
     pPriv->needInvalidate = FALSE;
     pPriv->redirectpixmap = NULL;
     pPriv->prime_slave_pixmap = NULL;
@@ -393,7 +378,7 @@ DRI2CreateDrawable(ClientPtr client, DrawablePtr pDraw, XID id,
 }
 
 static int
-DRI2DrawableGone(pointer p, XID id)
+DRI2DrawableGone(void *p, XID id)
 {
     DRI2DrawablePtr pPriv = p;
     DRI2DrawableRefPtr ref, next;
@@ -519,7 +504,6 @@ allocate_or_reuse_buffer(DrawablePtr pDraw, DRI2ScreenPtr ds,
 #endif
         || !dimensions_match || (pPriv->buffers[old_buf]->format != format)) {
         *buffer = create_buffer (pDraw, attachment, format);
-        pPriv->serialNumber = DRI2DrawableSerial(pDraw);
         return TRUE;
 
     }
@@ -585,8 +569,7 @@ do_get_buffers(DrawablePtr pDraw, int *width, int *height,
     ds = DRI2GetScreen(pDraw->pScreen);
 
     dimensions_match = (pDraw->width == pPriv->width)
-        && (pDraw->height == pPriv->height)
-        && (pPriv->serialNumber == DRI2DrawableSerial(pDraw));
+        && (pDraw->height == pPriv->height);
 
     buffers = calloc((count + 1), sizeof(buffers[0]));
     if (!buffers)
@@ -797,7 +780,7 @@ static inline PixmapPtr GetDrawablePixmap(DrawablePtr drawable)
  * pixmap
  */
 static int
-DRI2InvalidateWalk(WindowPtr pWin, pointer data)
+DRI2InvalidateWalk(WindowPtr pWin, void *data)
 {
     if (pWin->drawable.pScreen->GetWindowPixmap(pWin) != data)
         return WT_DONTWALKCHILDREN;
@@ -1253,6 +1236,7 @@ DRI2SwapBuffersWithRegion(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc
     return Success;
 }
 #endif
+
 
 int
 DRI2SwapBuffers(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
@@ -1785,8 +1769,6 @@ DRI2CloseScreen(ScreenPtr pScreen)
     free(ds);
     dixSetPrivate(&pScreen->devPrivates, dri2ScreenPrivateKey, NULL);
 }
-
-extern Bool DRI2ModuleSetup(void);
 
 /* Called by InitExtensions() */
 Bool

@@ -43,6 +43,7 @@ SOFTWARE.
 #include "xvdix.h"
 #ifdef MITSHM
 #include <X11/extensions/shmproto.h>
+#include "shmint.h"
 #endif
 
 #include "xvdisp.h"
@@ -702,7 +703,7 @@ ProcXvUngrabPort(ClientPtr client)
 static int
 ProcXvStopVideo(ClientPtr client)
 {
-    int status, rc;
+    int status, ret;
     DrawablePtr pDraw;
     XvPortPtr pPort;
 
@@ -716,9 +717,9 @@ ProcXvStopVideo(ClientPtr client)
         return status;
     }
 
-    rc = dixLookupDrawable(&pDraw, stuff->drawable, client, 0, DixWriteAccess);
-    if (rc != Success)
-        return rc;
+    ret = dixLookupDrawable(&pDraw, stuff->drawable, client, 0, DixWriteAccess);
+    if (ret != Success)
+        return ret;
 
     return XvdiStopVideo(client, pPort, pDraw);
 }
@@ -949,18 +950,6 @@ ProcXvPutImage(ClientPtr client)
 }
 
 #ifdef MITSHM
-/* redefined here since it's not in any header file */
-typedef struct _ShmDesc {
-    struct _ShmDesc *next;
-    int shmid;
-    int refcnt;
-    char *addr;
-    Bool writable;
-    unsigned long size;
-} ShmDescRec, *ShmDescPtr;
-
-extern RESTYPE ShmSegType;
-extern int ShmCompletionCode;
 
 static int
 ProcXvShmPutImage(ClientPtr client)
@@ -1005,7 +994,7 @@ ProcXvShmPutImage(ClientPtr client)
     if (!pImage)
         return BadMatch;
 
-    status = dixLookupResourceByType((pointer *) &shmdesc, stuff->shmseg,
+    status = dixLookupResourceByType((void **) &shmdesc, stuff->shmseg,
                                      ShmSegType, serverClient, DixReadAccess);
     if (status != Success)
         return status;
@@ -1523,12 +1512,12 @@ XineramaXvStopVideo(ClientPtr client)
     REQUEST(xvStopVideoReq);
     REQUEST_SIZE_MATCH(xvStopVideoReq);
 
-    result = dixLookupResourceByClass((pointer *) &draw, stuff->drawable,
+    result = dixLookupResourceByClass((void **) &draw, stuff->drawable,
                                       XRC_DRAWABLE, client, DixWriteAccess);
     if (result != Success)
         return (result == BadValue) ? BadDrawable : result;
 
-    result = dixLookupResourceByType((pointer *) &port, stuff->port,
+    result = dixLookupResourceByType((void **) &port, stuff->port,
                                      XvXRTPort, client, DixReadAccess);
     if (result != Success)
         return result;
@@ -1553,7 +1542,7 @@ XineramaXvSetPortAttribute(ClientPtr client)
 
     REQUEST_SIZE_MATCH(xvSetPortAttributeReq);
 
-    result = dixLookupResourceByType((pointer *) &port, stuff->port,
+    result = dixLookupResourceByType((void **) &port, stuff->port,
                                      XvXRTPort, client, DixReadAccess);
     if (result != Success)
         return result;
@@ -1579,17 +1568,17 @@ XineramaXvShmPutImage(ClientPtr client)
 
     REQUEST_SIZE_MATCH(xvShmPutImageReq);
 
-    result = dixLookupResourceByClass((pointer *) &draw, stuff->drawable,
+    result = dixLookupResourceByClass((void **) &draw, stuff->drawable,
                                       XRC_DRAWABLE, client, DixWriteAccess);
     if (result != Success)
         return (result == BadValue) ? BadDrawable : result;
 
-    result = dixLookupResourceByType((pointer *) &gc, stuff->gc,
+    result = dixLookupResourceByType((void **) &gc, stuff->gc,
                                      XRT_GC, client, DixReadAccess);
     if (result != Success)
         return result;
 
-    result = dixLookupResourceByType((pointer *) &port, stuff->port,
+    result = dixLookupResourceByType((void **) &port, stuff->port,
                                      XvXRTPort, client, DixReadAccess);
     if (result != Success)
         return result;
@@ -1631,17 +1620,17 @@ XineramaXvPutImage(ClientPtr client)
 
     REQUEST_AT_LEAST_SIZE(xvPutImageReq);
 
-    result = dixLookupResourceByClass((pointer *) &draw, stuff->drawable,
+    result = dixLookupResourceByClass((void **) &draw, stuff->drawable,
                                       XRC_DRAWABLE, client, DixWriteAccess);
     if (result != Success)
         return (result == BadValue) ? BadDrawable : result;
 
-    result = dixLookupResourceByType((pointer *) &gc, stuff->gc,
+    result = dixLookupResourceByType((void **) &gc, stuff->gc,
                                      XRT_GC, client, DixReadAccess);
     if (result != Success)
         return result;
 
-    result = dixLookupResourceByType((pointer *) &port, stuff->port,
+    result = dixLookupResourceByType((void **) &port, stuff->port,
                                      XvXRTPort, client, DixReadAccess);
     if (result != Success)
         return result;
@@ -1679,17 +1668,17 @@ XineramaXvPutVideo(ClientPtr client)
 
     REQUEST_AT_LEAST_SIZE(xvPutVideoReq);
 
-    result = dixLookupResourceByClass((pointer *) &draw, stuff->drawable,
+    result = dixLookupResourceByClass((void **) &draw, stuff->drawable,
                                       XRC_DRAWABLE, client, DixWriteAccess);
     if (result != Success)
         return (result == BadValue) ? BadDrawable : result;
 
-    result = dixLookupResourceByType((pointer *) &gc, stuff->gc,
+    result = dixLookupResourceByType((void **) &gc, stuff->gc,
                                      XRT_GC, client, DixReadAccess);
     if (result != Success)
         return result;
 
-    result = dixLookupResourceByType((pointer *) &port, stuff->port,
+    result = dixLookupResourceByType((void **) &port, stuff->port,
                                      XvXRTPort, client, DixReadAccess);
     if (result != Success)
         return result;
@@ -1727,17 +1716,17 @@ XineramaXvPutStill(ClientPtr client)
 
     REQUEST_AT_LEAST_SIZE(xvPutImageReq);
 
-    result = dixLookupResourceByClass((pointer *) &draw, stuff->drawable,
+    result = dixLookupResourceByClass((void **) &draw, stuff->drawable,
                                       XRC_DRAWABLE, client, DixWriteAccess);
     if (result != Success)
         return (result == BadValue) ? BadDrawable : result;
 
-    result = dixLookupResourceByType((pointer *) &gc, stuff->gc,
+    result = dixLookupResourceByType((void **) &gc, stuff->gc,
                                      XRT_GC, client, DixReadAccess);
     if (result != Success)
         return result;
 
-    result = dixLookupResourceByType((pointer *) &port, stuff->port,
+    result = dixLookupResourceByType((void **) &port, stuff->port,
                                      XvXRTPort, client, DixReadAccess);
     if (result != Success)
         return result;

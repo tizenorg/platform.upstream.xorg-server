@@ -57,8 +57,6 @@
 
 #include "extinit.h"
 
-extern int DeviceValuator;
-
 /* XTest events are sent during request processing and may be interruped by
  * a SIGIO. We need a separate event list to avoid events overwriting each
  * other's memory */
@@ -129,7 +127,7 @@ ProcXTestCompareCursor(ClientPtr client)
     else if (stuff->cursor == XTestCurrentCursor)
         pCursor = GetSpriteCursor(ptr);
     else {
-        rc = dixLookupResourceByType((pointer *) &pCursor, stuff->cursor,
+        rc = dixLookupResourceByType((void **) &pCursor, stuff->cursor,
                                      RT_CURSOR, client, DixReadAccess);
         if (rc != Success) {
             client->errorValue = stuff->cursor;
@@ -158,7 +156,6 @@ ProcXTestFakeInput(ClientPtr client)
     DeviceIntPtr dev = NULL;
     WindowPtr root;
     Bool extension = FALSE;
-    deviceValuator *dv = NULL;
     ValuatorMask mask;
     int valuators[MAX_VALUATORS] = { 0 };
     int numValuators = 0;
@@ -243,14 +240,14 @@ ProcXTestFakeInput(ClientPtr client)
         }
 
         if (nev > 1 && !dev->valuator) {
-            client->errorValue = dv->first_valuator;
+            client->errorValue = firstValuator;
             return BadValue;
         }
 
         /* check validity of valuator events */
         base = firstValuator;
         for (n = 1; n < nev; n++) {
-            dv = (deviceValuator *) (ev + n);
+            deviceValuator *dv = (deviceValuator *) (ev + n);
             if (dv->type != DeviceValuator) {
                 client->errorValue = dv->type;
                 return BadValue;
@@ -308,7 +305,7 @@ ProcXTestFakeInput(ClientPtr client)
             numValuators = 2;
             firstValuator = 0;
             if (ev->u.u.detail == xFalse)
-                flags = POINTER_ABSOLUTE | POINTER_SCREEN;
+                flags = POINTER_ABSOLUTE | POINTER_DESKTOP;
             break;
         default:
             client->errorValue = ev->u.u.type;
@@ -379,6 +376,14 @@ ProcXTestFakeInput(ClientPtr client)
                 client->errorValue = ev->u.keyButtonPointer.root;
                 return BadValue;
             }
+
+            /* Add the root window's offset to the valuators */
+            if ((flags & POINTER_ABSOLUTE) && firstValuator <= 1 && numValuators > 0) {
+                if (firstValuator == 0)
+                    valuators[0] += root->drawable.pScreen->x;
+                if (firstValuator < 2 && firstValuator + numValuators > 1)
+                    valuators[1 - firstValuator] += root->drawable.pScreen->y;
+            }
         }
         if (ev->u.u.detail != xTrue && ev->u.u.detail != xFalse) {
             client->errorValue = ev->u.u.detail;
@@ -421,7 +426,7 @@ ProcXTestFakeInput(ClientPtr client)
     }
 
     for (i = 0; i < nevents; i++)
-        mieqProcessDeviceEvent(dev, &xtest_evlist[i], NULL);
+        mieqProcessDeviceEvent(dev, &xtest_evlist[i], miPointerGetScreen(inputInfo.pointer));
 
     if (need_ptr_update)
         miPointerUpdateSprite(dev);

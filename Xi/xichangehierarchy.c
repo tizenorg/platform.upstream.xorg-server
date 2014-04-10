@@ -52,6 +52,7 @@
 #include "xkbsrv.h"
 
 #include "xichangehierarchy.h"
+#include "xibarriers.h"
 
 /**
  * Send the current state of the device hierarchy to all clients.
@@ -79,7 +80,7 @@ XISendDeviceHierarchyEvent(int flags[MAXDEVICES])
     ev->flags = 0;
     ev->num_info = inputInfo.numDevices;
 
-    info = (xXIHierarchyInfo *) & ev[1];
+    info = (xXIHierarchyInfo *) &ev[1];
     for (dev = inputInfo.devices; dev; dev = dev->next) {
         info->deviceid = dev->id;
         info->enabled = dev->enabled;
@@ -142,6 +143,10 @@ add_master(ClientPtr client, xXIAddMasterInfo * c, int flags[MAXDEVICES])
     int rc;
 
     name = calloc(c->name_len + 1, sizeof(char));
+    if (name == NULL) {
+        rc = BadAlloc;
+        goto unwind;
+    }
     strncpy(name, (char *) &c[1], c->name_len);
 
     rc = AllocDevicePair(client, name, &ptr, &keybd,
@@ -188,6 +193,8 @@ add_master(ClientPtr client, xXIAddMasterInfo * c, int flags[MAXDEVICES])
     AttachDevice(NULL, XTestkeybd, keybd);
     flags[XTestptr->id] |= XISlaveAttached;
     flags[XTestkeybd->id] |= XISlaveAttached;
+
+    XIBarrierNewMasterDevice(client, ptr->id);
 
  unwind:
     free(name);
@@ -292,6 +299,8 @@ remove_master(ClientPtr client, xXIRemoveMasterInfo * r, int flags[MAXDEVICES])
             }
         }
     }
+
+    XIBarrierRemoveMasterDevice(client, ptr->id);
 
     /* disable the remove the devices, XTest devices must be done first
        else the sprites they rely on will be destroyed  */

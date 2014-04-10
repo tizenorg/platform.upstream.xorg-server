@@ -56,10 +56,6 @@ void
 void
  winLogVersionInfo(void);
 
-#ifdef DDXOSVERRORF
-void OsVendorVErrorF(const char *pszFormat, va_list va_args);
-#endif
-
 /*
  * Process arguments on the command line
  */
@@ -146,7 +142,7 @@ winInitializeScreenDefaults(void)
 #endif
     defaultScreenInfo.fMultipleMonitors = FALSE;
     defaultScreenInfo.fLessPointer = FALSE;
-    defaultScreenInfo.iResizeMode = notAllowed;
+    defaultScreenInfo.iResizeMode = resizeWithRandr;
     defaultScreenInfo.fNoTrayIcon = FALSE;
     defaultScreenInfo.iE3BTimeout = WIN_E3B_DEFAULT;
     defaultScreenInfo.fUseWinKillKey = WIN_DEFAULT_WIN_KILL;
@@ -1078,6 +1074,11 @@ ddxProcessArgument(int argc, char *argv[], int i)
         return 1;
     }
 
+    if (IS_OPTION("-hostintitle")) {
+        g_fHostInTitle = TRUE;
+        return 1;
+    }
+
     return 0;
 }
 
@@ -1165,6 +1166,8 @@ winLogVersionInfo(void)
     ErrorF("Vendor: %s\n", XVENDORNAME);
     ErrorF("Release: %d.%d.%d.%d\n", XORG_VERSION_MAJOR,
            XORG_VERSION_MINOR, XORG_VERSION_PATCH, XORG_VERSION_SNAP);
-    ErrorF("%s\n\n", BUILDERSTRING);
+    if (strlen(BUILDERSTRING))
+        ErrorF("%s\n", BUILDERSTRING);
     ErrorF("Contact: %s\n", BUILDERADDR);
+    ErrorF("\n");
 }

@@ -701,7 +701,6 @@ dmxEnqueue(DevicePtr pDev, int type, int detail, KeySym keySym,
            XEvent * e, DMXBlockType block)
 {
     GETDMXINPUTFROMPDEV;
-    xEvent xE;
     DeviceIntPtr p = dmxLocal->pDevice;
     int valuators[3];
     ValuatorMask mask;
@@ -716,7 +715,7 @@ dmxEnqueue(DevicePtr pDev, int type, int detail, KeySym keySym,
         if (dmxCheckFunctionKeys(dmxLocal, type, keySym))
             return;
         if (dmxLocal->sendsCore && dmxLocal != dmxLocalCoreKeyboard)
-            xE.u.u.detail = dmxFixup(pDev, detail, keySym);
+            detail = dmxFixup(pDev, detail, keySym);
 
         /*ErrorF("KEY %d  sym %d\n", detail, (int) keySym); */
         QueueKeyboardEvents(p, type, detail, NULL);
@@ -726,8 +725,7 @@ dmxEnqueue(DevicePtr pDev, int type, int detail, KeySym keySym,
     case ButtonRelease:
         detail = dmxGetButtonMapping(dmxLocal, detail);
         valuator_mask_zero(&mask);
-        QueuePointerEvents(p, type, detail,
-                           POINTER_ABSOLUTE | POINTER_SCREEN, &mask);
+        QueuePointerEvents(p, type, detail, 0, &mask);
         return;
 
     case MotionNotify:

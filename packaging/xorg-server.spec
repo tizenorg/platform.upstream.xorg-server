@@ -103,7 +103,7 @@ cp %{SOURCE1001} .
 
 
 %build
-./autogen.sh
+NOCONFIGURE=1 ./autogen.sh
 %reconfigure \
 %if %{with mesa}
 %ifarch %ix86 x86_64

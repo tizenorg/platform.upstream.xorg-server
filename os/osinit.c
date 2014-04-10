@@ -102,6 +102,7 @@ OsRegisterSigWrapper(OsSigWrapperPtr newSigWrapper)
  * OsSigHandler --
  *    Catch unexpected signals and exit or continue cleanly.
  */
+#if !defined(WIN32) || defined(__CYGWIN__)
 static void
 #ifdef SA_SIGINFO
 OsSigHandler(int signo, siginfo_t * sip, void *unused)
@@ -129,7 +130,7 @@ OsSigHandler(int signo)
 
 #ifdef SA_SIGINFO
     if (sip->si_code == SI_USER) {
-        ErrorFSigSafe("Recieved signal %u sent by process %u, uid %u\n", signo,
+        ErrorFSigSafe("Received signal %u sent by process %u, uid %u\n", signo,
                      sip->si_pid, sip->si_uid);
     }
     else {
@@ -146,6 +147,9 @@ OsSigHandler(int signo)
     FatalError("Caught signal %d (%s). Server aborting\n",
                signo, strsignal(signo));
 }
+#endif /* !WIN32 || __CYGWIN__ */
+
+#include "busfault.h"
 
 void
 OsInit(void)
@@ -155,6 +159,7 @@ OsInit(void)
     char fname[PATH_MAX];
 
     if (!been_here) {
+#if !defined(WIN32) || defined(__CYGWIN__)
         struct sigaction act, oact;
         int i;
 
@@ -185,6 +190,11 @@ OsInit(void)
                        siglist[i], strerror(errno));
             }
         }
+#endif /* !WIN32 || __CYGWIN__ */
+#ifdef BUSFAULT
+        busfault_init();
+#endif
+
 #ifdef HAVE_BACKTRACE
         /*
          * initialize the backtracer, since the ctor calls dlopen(), which
@@ -207,10 +217,18 @@ OsInit(void)
         dlinfo(RTLD_SELF, RTLD_DI_SETSIGNAL, &failure_signal);
 #endif
 
-#if !defined(__CYGWIN__)
+#if !defined(XQUARTZ)    /* STDIN is already /dev/null and STDOUT/STDERR is managed by console_redirect.c */
+# if defined(__APPLE__)
+        int devnullfd = open(devnull, O_RDWR, 0);
+        assert(devnullfd > 2);
+
+        dup2(devnullfd, STDIN_FILENO);
+        dup2(devnullfd, STDOUT_FILENO);
+        close(devnullfd);
+# elif !defined(__CYGWIN__)
         fclose(stdin);
         fclose(stdout);
-#endif
+# endif
         /* 
          * If a write of zero bytes to stderr returns non-zero, i.e. -1, 
          * then writing to stderr failed, and we'll write somewhere else 
@@ -244,9 +262,12 @@ OsInit(void)
             setlinebuf(stderr);
 #endif
         }
+#endif /* !XQUARTZ */
 
+#if !defined(WIN32) || defined(__CYGWIN__)
         if (getpgrp() == 0)
             setpgid(0, 0);
+#endif
 
 #ifdef RLIMIT_DATA
         if (limitDataSpace >= 0) {

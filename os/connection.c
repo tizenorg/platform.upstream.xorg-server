@@ -138,6 +138,7 @@ fd_set OutputPending;           /* clients with reply/event data ready to go */
 int MaxClients = 0;
 Bool NewOutputPending;          /* not yet attempted to write some new output */
 Bool AnyClientsWriteBlocked;    /* true if some client blocked on write */
+Bool NoListenAll;               /* Don't establish any listening sockets */
 
 static Bool RunFromSmartParent; /* send SIGUSR1 to parent process */
 Bool RunFromSigStopParent;      /* send SIGSTOP to our own process; Upstart (or
@@ -360,8 +361,8 @@ void
 NotifyParentProcess(void)
 {
 #if !defined(WIN32)
-    if (dynamic_display[0]) {
-        write(displayfd, dynamic_display, strlen(dynamic_display));
+    if (displayfd >= 0) {
+        write(displayfd, display, strlen(display));
         write(displayfd, "\n", 1);
         close(displayfd);
     }
@@ -417,15 +418,18 @@ CreateWellKnownSockets(void)
     FD_ZERO(&WellKnownConnections);
 
     /* display is initialized to "0" by main(). It is then set to the display
-     * number if specified on the command line, or to NULL when the -displayfd
-     * option is used. */
-    if (display) {
+     * number if specified on the command line. */
+
+    if (NoListenAll) {
+        ListenTransCount = 0;
+    }
+    else if ((displayfd < 0) || explicit_display) {
         if (TryCreateSocket(atoi(display), &partial) &&
             ListenTransCount >= 1)
             if (!PartialNetwork && partial)
                 FatalError ("Failed to establish all listening sockets");
     }
-    else { /* -displayfd */
+    else { /* -displayfd and no explicit display number */
         Bool found = 0;
         for (i = 0; i < 65535 - X_TCP_PORT; i++) {
             if (TryCreateSocket(i, &partial) && !partial) {
@@ -453,9 +457,10 @@ CreateWellKnownSockets(void)
             DefineSelf (fd);
     }
 
-    if (!XFD_ANYSET(&WellKnownConnections))
+    if (!XFD_ANYSET(&WellKnownConnections) && !NoListenAll)
         FatalError
             ("Cannot establish any listening sockets - Make sure an X server isn't already running");
+
 #if !defined(WIN32)
     OsSignal(SIGPIPE, SIG_IGN);
     OsSignal(SIGHUP, AutoResetServer);
@@ -773,11 +778,11 @@ AllocNewConnection(XtransConnInfo trans_conn, int fd, CARD32 conn_time)
     oc->output = (ConnectionOutputPtr) NULL;
     oc->auth_id = None;
     oc->conn_time = conn_time;
-    if (!(client = NextAvailableClient((pointer) oc))) {
+    if (!(client = NextAvailableClient((void *) oc))) {
         free(oc);
         return NullClient;
     }
-    oc->local_client = ComputeLocalClient(client);
+    client->local = ComputeLocalClient(client);
 #if !defined(WIN32)
     ConnectionTranslation[fd] = client->index;
 #else
@@ -811,7 +816,7 @@ AllocNewConnection(XtransConnInfo trans_conn, int fd, CARD32 conn_time)
  *****************/
 
  /*ARGSUSED*/ Bool
-EstablishNewConnections(ClientPtr clientUnused, pointer closure)
+EstablishNewConnections(ClientPtr clientUnused, void *closure)
 {
     fd_set readyconnections;    /* set of listeners that are ready */
     int curconn;                /* fd of listener that's ready */
@@ -907,7 +912,7 @@ ErrorConnMax(XtransConnInfo trans_conn)
     xConnSetupPrefix csp;
     char pad[3] = { 0, 0, 0 };
     struct iovec iov[3];
-    char byteOrder = 0;
+    char order = 0;
     int whichbyte = 1;
     struct timeval waittime;
     fd_set mask;
@@ -920,15 +925,15 @@ ErrorConnMax(XtransConnInfo trans_conn)
     FD_SET(fd, &mask);
     (void) Select(fd + 1, &mask, NULL, NULL, &waittime);
     /* try to read the byte-order of the connection */
-    (void) _XSERVTransRead(trans_conn, &byteOrder, 1);
-    if ((byteOrder == 'l') || (byteOrder == 'B')) {
+    (void) _XSERVTransRead(trans_conn, &order, 1);
+    if (order == 'l' || order == 'B' || order == 'r' || order == 'R') {
         csp.success = xFalse;
         csp.lengthReason = sizeof(NOROOM) - 1;
         csp.length = (sizeof(NOROOM) + 2) >> 2;
         csp.majorVersion = X_PROTOCOL;
         csp.minorVersion = X_PROTOCOL_REVISION;
-        if (((*(char *) &whichbyte) && (byteOrder == 'B')) ||
-            (!(*(char *) &whichbyte) && (byteOrder == 'l'))) {
+	if (((*(char *) &whichbyte) && (order == 'B' || order == 'R')) ||
+	    (!(*(char *) &whichbyte) && (order == 'l' || order == 'r'))) {
             swaps(&csp.majorVersion);
             swaps(&csp.minorVersion);
             swaps(&csp.length);
@@ -936,7 +941,7 @@ ErrorConnMax(XtransConnInfo trans_conn)
         iov[0].iov_len = sz_xConnSetupPrefix;
         iov[0].iov_base = (char *) &csp;
         iov[1].iov_len = csp.lengthReason;
-        iov[1].iov_base = NOROOM;
+        iov[1].iov_base = (void *) NOROOM;
         iov[2].iov_len = (4 - (csp.lengthReason & 3)) & 3;
         iov[2].iov_base = pad;
         (void) _XSERVTransWritev(trans_conn, iov, 3);
@@ -1051,15 +1056,15 @@ CloseDownConnection(ClientPtr client)
     if (FlushCallback)
         CallCallbacks(&FlushCallback, NULL);
 
-    if (oc->output && oc->output->count)
-        FlushClient(client, oc, (char *) NULL, 0);
+    if (oc->output)
+	FlushClient(client, oc, (char *) NULL, 0);
 #ifdef XDMCP
     XdmcpCloseDisplay(oc->fd);
 #endif
     CloseDownFileDescriptor(oc);
     FreeOsBuffers(oc);
     free(client->osPrivate);
-    client->osPrivate = (pointer) NULL;
+    client->osPrivate = (void *) NULL;
     if (auditTrailLevel > 1)
         AuditF("client %d disconnected\n", client->index);
 }
@@ -1276,8 +1281,7 @@ MakeClientGrabPervious(ClientPtr client)
     }
 }
 
-#ifdef XQUARTZ
-/* Add a fd (from launchd) to our listeners */
+/* Add a fd (from launchd or similar) to our listeners */
 void
 ListenOnOpenFD(int fd, int noxauth)
 {
@@ -1299,7 +1303,7 @@ ListenOnOpenFD(int fd, int noxauth)
      */
     ciptr = _XSERVTransReopenCOTSServer(5, fd, port);
     if (ciptr == NULL) {
-        ErrorF("Got NULL while trying to Reopen launchd port.\n");
+        ErrorF("Got NULL while trying to Reopen listen port.\n");
         return;
     }
 
@@ -1332,4 +1336,29 @@ ListenOnOpenFD(int fd, int noxauth)
 #endif
 }
 
-#endif
+/* based on TRANS(SocketUNIXAccept) (XtransConnInfo ciptr, int *status) */
+Bool
+AddClientOnOpenFD(int fd)
+{
+    XtransConnInfo ciptr;
+    CARD32 connect_time;
+    char port[20];
+
+    snprintf(port, sizeof(port), ":%d", atoi(display));
+    ciptr = _XSERVTransReopenCOTSServer(5, fd, port);
+    if (ciptr == NULL)
+        return FALSE;
+
+    _XSERVTransSetOption(ciptr, TRANS_NONBLOCKING, 1);
+    ciptr->flags |= TRANS_NOXAUTH;
+
+    connect_time = GetTimeInMillis();
+
+    if (!AllocNewConnection(ciptr, fd, connect_time)) {
+        ErrorConnMax(ciptr);
+        _XSERVTransClose(ciptr);
+        return FALSE;
+    }
+
+    return TRUE;
+}
