@@ -481,9 +481,6 @@
 /* Directory for shared memory temp files */
 #undef SHMDIR
 
-/* Don't let Xdefs.h define 'pointer' */
-#define _XTYPEDEF_POINTER       1
-
 /* Don't let XIproto define 'Pointer' */
 #define _XITYPEDEF_POINTER      1
 

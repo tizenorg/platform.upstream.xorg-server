@@ -325,6 +325,7 @@ case $host_cpu in
 	;;
   arm*)
 	ARM_VIDEO=yes
+	DEFAULT_INT10="stub"
 	;;
   i*86)
 	I386_VIDEO=yes
@@ -2478,7 +2479,7 @@ if test "x$XWAYLAND" = xyes; then
 	XWAYLAND_SYS_LIBS="$XWAYLANDMODULES_LIBS $GLX_SYS_LIBS"
 	AC_SUBST([XWAYLAND_LIBS])
 	AC_SUBST([XWAYLAND_SYS_LIBS])
-	WAYLAND_SCANNER_RULES(['$(top_srcdir)/hw/xwayland'])
+#	WAYLAND_SCANNER_RULES(['$(top_srcdir)/hw/xwayland'])
 fi
 
 
