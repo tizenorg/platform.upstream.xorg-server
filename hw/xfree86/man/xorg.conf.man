@@ -442,10 +442,14 @@ __modulepath__
 .TP 7
 .BI "LogFile \*q" path \*q
 sets the name of the Xorg server log file.
-The default log file name is
+The default log file name when running as root is
 .PP
 .RS 11
 .RI __logdir__/Xorg. <n> .log
+.RE
+and for non root it is
+.RS 11
+.RI $XDG_DATA_HOME/xorg/Xorg. <n> .log
 .RE
 .PP
 .RS 7
@@ -667,6 +671,10 @@ If this option is disabled, then the devices will be added (and the
 DevicePresenceNotify event sent), but not enabled, thus leaving policy up
 to the client.
 Enabled by default.
+.TP 7
+.BI "Option \*qAutoAddGPU\*q \*q" boolean \*q
+If this option is disabled, then no GPU devices will be added from the udev
+backend. Enabled by default. (May need to be disabled to setup Xinerama).
 .TP 7
 .BI "Option \*qLog\*q \*q" string \*q
 This option controls whether the log is flushed and/or synced to disk after
@@ -972,7 +980,8 @@ is constructed. This is mainly a matter of personal preference.
 .BI "Option \*qConstantDeceleration\*q  \*q" real \*q
 Makes the pointer go
 .B deceleration
-times slower than normal. Most useful for high-resolution devices.
+times slower than normal. Most useful for high-resolution devices. A value
+between 0 and 1 will speed up the pointer.
 .TP 7
 .BI "Option \*qAdaptiveDeceleration\*q  \*q" real \*q
 Allows to actually decelerate the pointer when going slow. At most, it will be
@@ -1676,6 +1685,17 @@ This optional entry specifies a mode to be marked as the preferred initial mode
 of the monitor.
 (RandR 1.2-supporting drivers only)
 .TP 7
+.BI "Option \*qZoomModes\*q \*q" name " " name " " ... \*q
+This optional entry specifies modes to be marked as zoom modes.
+It is possible to switch to the next and previous mode via
+.BR Ctrl+Alt+Keypad\-Plus " and " Ctrl+Alt+Keypad\-Minus .
+All these keypad available modes are selected from the screen mode list.
+This list is a copy of the compatibility output monitor mode list.
+Since this output is the output connected to the lowest
+dot-area monitor, as determined from its largest size mode, that
+monitor defines the available zoom modes.
+(RandR 1.2-supporting drivers only)
+.TP 7
 .BI "Option \*qPosition\*q \*q" x " " y \*q
 This optional entry specifies the position of the monitor within the X
 screen.
@@ -1821,9 +1841,7 @@ sections have the following format:
 .PP
 The
 .B Identifier
-and
-.B Device
-entries are mandatory.
+entry is mandatory.
 All others are optional.
 .PP
 The
@@ -1841,11 +1859,10 @@ The entries available
 for this section are:
 .TP 7
 .BI "Device  \*q" device\-id \*q
-This mandatory entry specifies the
+This entry specifies the
 .B Device
-section to be used for this screen.
-This is what ties a specific graphics card to a screen.
-The
+section to be used for this screen.  When multiple graphics cards are
+present, this is what ties a specific card to a screen.  The
 .I device\-id
 must match the
 .B Identifier

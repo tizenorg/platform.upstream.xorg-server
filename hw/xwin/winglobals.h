@@ -26,6 +26,12 @@
 #ifndef WINGLOBALS_H
 #define WINGLOBALS_H
 
+#ifdef HAVE_XWIN_CONFIG_H
+#include <xwin-config.h>
+#endif
+
+#include <pthread.h>
+
 /*
  * References to external symbols
  */
@@ -48,6 +54,7 @@ extern Bool g_fXdmcpEnabled;
 extern Bool g_fNoHelpMessageBox;
 extern Bool g_fSilentDupError;
 extern Bool g_fNativeGl;
+extern Bool g_fHostInTitle;
 
 extern HWND g_hDlgDepthChange;
 extern HWND g_hDlgExit;
@@ -65,7 +72,6 @@ typedef int (*winDispatchProcPtr) (ClientPtr);
  * Wrapped DIX functions
  */
 extern winDispatchProcPtr winProcEstablishConnectionOrig;
-extern winDispatchProcPtr winProcQueryTreeOrig;
 extern winDispatchProcPtr winProcSetSelectionOwnerOrig;
 #endif
 
@@ -85,5 +91,7 @@ extern Bool g_fButton[3];
 #ifdef XWIN_MULTIWINDOWEXTWM
 extern Bool g_fNoConfigureWindow;
 #endif
+
+extern pthread_mutex_t g_pmTerminating;
 
 #endif                          /* WINGLOBALS_H */

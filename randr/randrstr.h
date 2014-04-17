@@ -92,7 +92,7 @@ struct _rrPropertyValue {
     Atom type;                  /* ignored by server */
     short format;               /* format of data for swapping - 8,16,32 */
     long size;                  /* size of data in (format/8) bytes */
-    pointer data;               /* private to client */
+    void *data;                 /* private to client */
 };
 
 struct _rrProperty {
@@ -164,6 +164,7 @@ struct _rrProvider {
     int nameLength;
     RRPropertyPtr properties;
     Bool pendingProperties;
+    Bool changed;
     struct _rrProvider *offload_sink;
     struct _rrProvider *output_source;
 };
@@ -300,6 +301,7 @@ typedef struct _rrScrPriv {
     Bool changed;               /* some config changed */
     Bool configChanged;         /* configuration changed */
     Bool layoutChanged;         /* screen layout changed */
+    Bool resourcesChanged;      /* screen resources change */
 
     CARD16 minWidth, minHeight;
     CARD16 maxWidth, maxHeight;
@@ -383,7 +385,7 @@ extern _X_EXPORT RESTYPE RRCrtcType, RRModeType, RROutputType, RRProviderType;
 
 #define VERIFY_RR_OUTPUT(id, ptr, a)\
     {\
-	int rc = dixLookupResourceByType((pointer *)&(ptr), id,\
+	int rc = dixLookupResourceByType((void **)&(ptr), id,\
 	                                 RROutputType, client, a);\
 	if (rc != Success) {\
 	    client->errorValue = id;\
@@ -393,7 +395,7 @@ extern _X_EXPORT RESTYPE RRCrtcType, RRModeType, RROutputType, RRProviderType;
 
 #define VERIFY_RR_CRTC(id, ptr, a)\
     {\
-	int rc = dixLookupResourceByType((pointer *)&(ptr), id,\
+	int rc = dixLookupResourceByType((void **)&(ptr), id,\
 	                                 RRCrtcType, client, a);\
 	if (rc != Success) {\
 	    client->errorValue = id;\
@@ -403,7 +405,7 @@ extern _X_EXPORT RESTYPE RRCrtcType, RRModeType, RROutputType, RRProviderType;
 
 #define VERIFY_RR_MODE(id, ptr, a)\
     {\
-	int rc = dixLookupResourceByType((pointer *)&(ptr), id,\
+	int rc = dixLookupResourceByType((void **)&(ptr), id,\
 	                                 RRModeType, client, a);\
 	if (rc != Success) {\
 	    client->errorValue = id;\
@@ -413,7 +415,7 @@ extern _X_EXPORT RESTYPE RRCrtcType, RRModeType, RROutputType, RRProviderType;
 
 #define VERIFY_RR_PROVIDER(id, ptr, a)\
     {\
-        int rc = dixLookupResourceByType((pointer *)&(ptr), id,\
+        int rc = dixLookupResourceByType((void **)&(ptr), id,\
                                          RRProviderType, client, a);\
         if (rc != Success) {\
             client->errorValue = id;\
@@ -485,7 +487,14 @@ extern _X_EXPORT int
 extern _X_EXPORT void
  RRDeliverScreenEvent(ClientPtr client, WindowPtr pWin, ScreenPtr pScreen);
 
+extern _X_EXPORT void
+ RRResourcesChanged(ScreenPtr pScreen);
+
 /* randr.c */
+/* set a screen change on the primary screen */
+extern _X_EXPORT void
+RRSetChanged(ScreenPtr pScreen);
+
 /*
  * Send all pending events
  */
@@ -862,7 +871,7 @@ extern _X_EXPORT int
 
 RRChangeOutputProperty(RROutputPtr output, Atom property, Atom type,
                        int format, int mode, unsigned long len,
-                       pointer value, Bool sendevent, Bool pending);
+                       void *value, Bool sendevent, Bool pending);
 
 extern _X_EXPORT int
 
@@ -919,6 +928,9 @@ RRProviderSetCapabilities(RRProviderPtr provider, uint32_t capabilities);
 extern _X_EXPORT Bool
 RRProviderLookup(XID id, RRProviderPtr *provider_p);
 
+extern _X_EXPORT void
+RRDeliverProviderEvent(ClientPtr client, WindowPtr pWin, RRProviderPtr provider);
+
 /* rrproviderproperty.c */
 
 extern _X_EXPORT void
@@ -936,7 +948,15 @@ extern _X_EXPORT void
 extern _X_EXPORT int
 RRChangeProviderProperty(RRProviderPtr provider, Atom property, Atom type,
                        int format, int mode, unsigned long len,
-                       pointer value, Bool sendevent, Bool pending);
+                       void *value, Bool sendevent, Bool pending);
+
+extern _X_EXPORT int
+ RRConfigureProviderProperty(RRProviderPtr provider, Atom property,
+                             Bool pending, Bool range, Bool immutable,
+                             int num_values, INT32 *values);
+
+extern _X_EXPORT Bool
+ RRPostProviderPendingProperties(RRProviderPtr provider);
 
 extern _X_EXPORT int
  ProcRRGetProviderProperty(ClientPtr client);

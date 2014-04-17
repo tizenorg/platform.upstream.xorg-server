@@ -175,10 +175,7 @@ CreateMaskFromList(ClientPtr client, XEventClass * list, int count,
     int device;
     DeviceIntPtr tdev;
 
-    for (i = 0; i < EMASKSIZE; i++) {
-        mask[i].mask = 0;
-        mask[i].dev = NULL;
-    }
+    memset(mask, 0, EMASKSIZE * sizeof(struct tmask));
 
     for (i = 0; i < count; i++, list++) {
         device = *list >> 8;
@@ -194,7 +191,7 @@ CreateMaskFromList(ClientPtr client, XEventClass * list, int count,
         for (j = 0; j < ExtEventIndex; j++)
             if (EventInfo[j].type == (*list & 0xff)) {
                 mask[device].mask |= EventInfo[j].mask;
-                mask[device].dev = (Pointer) tdev;
+                mask[device].dev = (void *) tdev;
                 break;
             }
     }

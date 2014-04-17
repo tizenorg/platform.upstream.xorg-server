@@ -224,7 +224,7 @@ xf86HandleColormaps(ScreenPtr pScreen,
     ComputeGamma(pScreenPriv);
 
     /* get the default map */
-    dixLookupResourceByType((pointer *) &pDefMap, pScreen->defColormap,
+    dixLookupResourceByType((void **) &pDefMap, pScreen->defColormap,
                             RT_COLORMAP, serverClient, DixInstallAccess);
 
     if (!CMapAllocateColormapPrivate(pDefMap)) {
@@ -608,7 +608,7 @@ CMapRefreshColors(ColormapPtr pmap, int defs, int *indices)
     case GrayScale:
         for (i = 0; i < defs; i++) {
             index = indices[i];
-            entry = (EntryPtr) & pmap->red[index];
+            entry = (EntryPtr) &pmap->red[index];
 
             if (entry->fShared) {
                 colors[index].red =

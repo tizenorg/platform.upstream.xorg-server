@@ -71,9 +71,7 @@ static GlyphSharePtr sharedGlyphs = (GlyphSharePtr) NULL;
 
 DevScreenPrivateKeyRec cursorScreenDevPriv;
 
-#ifdef XFIXES
 static CARD32 cursorSerial;
-#endif
 
 static void
 FreeCursorBits(CursorBitsPtr bits)
@@ -106,7 +104,7 @@ FreeCursorBits(CursorBitsPtr bits)
  *  \param value must conform to DeleteType
  */
 int
-FreeCursor(pointer value, XID cid)
+FreeCursor(void *value, XID cid)
 {
     int nscr;
     CursorPtr pCurs = (CursorPtr) value;
@@ -114,8 +112,12 @@ FreeCursor(pointer value, XID cid)
     ScreenPtr pscr;
     DeviceIntPtr pDev = NULL;   /* unused anyway */
 
-    if (--pCurs->refcnt != 0)
+
+    UnrefCursor(pCurs);
+    if (CursorRefCount(pCurs) != 0)
         return Success;
+
+    BUG_WARN(CursorRefCount(pCurs) < 0);
 
     for (nscr = 0; nscr < screenInfo.numScreens; nscr++) {
         pscr = screenInfo.screens[nscr];
@@ -126,6 +128,29 @@ FreeCursor(pointer value, XID cid)
     free(pCurs);
     return Success;
 }
+
+CursorPtr
+RefCursor(CursorPtr cursor)
+{
+    if (cursor)
+        cursor->refcnt++;
+    return cursor;
+}
+
+CursorPtr
+UnrefCursor(CursorPtr cursor)
+{
+    if (cursor)
+        cursor->refcnt--;
+    return cursor;
+}
+
+int
+CursorRefCount(const CursorPtr cursor)
+{
+    return cursor ? cursor->refcnt : 0;
+}
+
 
 /*
  * We check for empty cursors so that we won't have to display them
@@ -245,10 +270,8 @@ AllocARGBCursor(unsigned char *psrcbits, unsigned char *pmaskbits,
     bits->refcnt = -1;
     CheckForEmptyMask(bits);
     pCurs->bits = bits;
-#ifdef XFIXES
     pCurs->serialNumber = ++cursorSerial;
     pCurs->name = None;
-#endif
 
     pCurs->foreRed = foreRed;
     pCurs->foreGreen = foreGreen;
@@ -296,13 +319,13 @@ AllocGlyphCursor(Font source, unsigned sourceChar, Font mask, unsigned maskChar,
     CursorPtr pCurs;
     GlyphSharePtr pShare;
 
-    rc = dixLookupResourceByType((pointer *) &sourcefont, source, RT_FONT,
+    rc = dixLookupResourceByType((void **) &sourcefont, source, RT_FONT,
                                  client, DixUseAccess);
     if (rc != Success) {
         client->errorValue = source;
         return rc;
     }
-    rc = dixLookupResourceByType((pointer *) &maskfont, mask, RT_FONT, client,
+    rc = dixLookupResourceByType((void **) &maskfont, mask, RT_FONT, client,
                                  DixUseAccess);
     if (rc != Success && mask != None) {
         client->errorValue = mask;
@@ -406,10 +429,8 @@ AllocGlyphCursor(Font source, unsigned sourceChar, Font mask, unsigned maskChar,
     CheckForEmptyMask(bits);
     pCurs->bits = bits;
     pCurs->refcnt = 1;
-#ifdef XFIXES
     pCurs->serialNumber = ++cursorSerial;
     pCurs->name = None;
-#endif
 
     pCurs->foreRed = foreRed;
     pCurs->foreGreen = foreGreen;
@@ -465,7 +486,7 @@ CreateRootCursor(char *unused1, unsigned int unused2)
     if (err != Success)
         return NullCursor;
 
-    err = dixLookupResourceByType((pointer *) &cursorfont, fontID, RT_FONT,
+    err = dixLookupResourceByType((void **) &cursorfont, fontID, RT_FONT,
                                   serverClient, DixReadAccess);
     if (err != Success)
         return NullCursor;
@@ -473,7 +494,7 @@ CreateRootCursor(char *unused1, unsigned int unused2)
                          &curs, serverClient, (XID) 0) != Success)
         return NullCursor;
 
-    if (!AddResource(FakeClientID(0), RT_CURSOR, (pointer) curs))
+    if (!AddResource(FakeClientID(0), RT_CURSOR, (void *) curs))
         return NullCursor;
 
     return curs;

@@ -145,43 +145,46 @@ static void get_xdmcp_sock(void);
 
 static void send_query_msg(void);
 
-static void recv_willing_msg(struct sockaddr * /*from */ ,
-                             int /*fromlen */ ,
-                             unsigned /*length */ );
+static void recv_willing_msg(struct sockaddr    *from,
+                             int                fromlen,
+                             unsigned           length);
 
 static void send_request_msg(void);
 
-static void recv_accept_msg(unsigned /*length */ );
+static void recv_accept_msg(unsigned    length);
 
-static void recv_decline_msg(unsigned /*length */ );
+static void recv_decline_msg(unsigned   length);
 
 static void send_manage_msg(void);
 
-static void recv_refuse_msg(unsigned /*length */ );
+static void recv_refuse_msg(unsigned    length);
 
-static void recv_failed_msg(unsigned /*length */ );
+static void recv_failed_msg(unsigned    length);
 
 static void send_keepalive_msg(void);
 
-static void recv_alive_msg(unsigned /*length */ );
+static void recv_alive_msg(unsigned     length );
 
-static void XdmcpFatal(const char * /*type */ ,
-                       ARRAY8Ptr /*status */ );
+static void XdmcpFatal(const char       *type,
+                       ARRAY8Ptr        status);
 
-static void XdmcpWarning(const char * /*str */ );
+static void XdmcpWarning(const char     *str);
 
-static void get_manager_by_name(int /*argc */ ,
-                                char ** /*argv */ ,
-                                int /*i */ );
+static void get_manager_by_name(int     argc,
+                                char    **argv,
+                                int     i);
 
-static void get_fromaddr_by_name(int /*argc */ , char ** /*argv */ ,
-                                 int /*i */ );
+static void get_fromaddr_by_name(int    argc,
+                                 char   **argv,
+                                 int    i);
 
 #if defined(IPv6) && defined(AF_INET6)
-static int get_mcast_options(int /*argc */ , char ** /*argv */ , int /*i */ );
+static int get_mcast_options(int        argc,
+                             char       **argv,
+                             int        i);
 #endif
 
-static void receive_packet(int /*socketfd */ );
+static void receive_packet(int socketfd);
 
 static void send_packet(void);
 
@@ -189,13 +192,13 @@ static void timeout(void);
 
 static void restart(void);
 
-static void XdmcpBlockHandler(pointer /*data */ ,
-                              struct timeval ** /*wt */ ,
-                              pointer /*LastSelectMask */ );
+static void XdmcpBlockHandler(void              *data ,
+                              struct timeval    **wt,
+                              void              *LastSelectMask);
 
-static void XdmcpWakeupHandler(pointer /*data */ ,
-                               int /*i */ ,
-                               pointer /*LastSelectMask */ );
+static void XdmcpWakeupHandler(void             *data,
+                               int              i,
+                               void             *LastSelectMask);
 
 /*
  * Register the Manufacturer display ID
@@ -578,7 +581,7 @@ XdmcpInit(void)
                                   strlen(defaultDisplayClass));
         AccessUsingXdmcp();
         RegisterBlockAndWakeupHandlers(XdmcpBlockHandler, XdmcpWakeupHandler,
-                                       (pointer) 0);
+                                       (void *) 0);
         timeOutRtx = 0;
         DisplayNumber = (CARD16) atoi(display);
         get_xdmcp_sock();
@@ -592,7 +595,7 @@ XdmcpReset(void)
     state = XDM_INIT_STATE;
     if (state != XDM_OFF) {
         RegisterBlockAndWakeupHandlers(XdmcpBlockHandler, XdmcpWakeupHandler,
-                                       (pointer) 0);
+                                       (void *) 0);
         timeOutRtx = 0;
         send_packet();
     }
@@ -635,18 +638,18 @@ XdmcpCloseDisplay(int sock)
  */
 
  /*ARGSUSED*/ static void
-XdmcpBlockHandler(pointer data, /* unused */
-                  struct timeval **wt, pointer pReadmask)
+XdmcpBlockHandler(void *data, /* unused */
+                  struct timeval **wt, void *pReadmask)
 {
-    fd_set *LastSelectMask = (fd_set *) pReadmask;
+    fd_set *last_select_mask = (fd_set *) pReadmask;
     CARD32 millisToGo;
 
     if (state == XDM_OFF)
         return;
-    FD_SET(xdmcpSocket, LastSelectMask);
+    FD_SET(xdmcpSocket, last_select_mask);
 #if defined(IPv6) && defined(AF_INET6)
     if (xdmcpSocket6 >= 0)
-        FD_SET(xdmcpSocket6, LastSelectMask);
+        FD_SET(xdmcpSocket6, last_select_mask);
 #endif
     if (timeOutTime == 0)
         return;
@@ -663,26 +666,26 @@ XdmcpBlockHandler(pointer data, /* unused */
  */
 
  /*ARGSUSED*/ static void
-XdmcpWakeupHandler(pointer data,        /* unused */
-                   int i, pointer pReadmask)
+XdmcpWakeupHandler(void *data,        /* unused */
+                   int i, void *pReadmask)
 {
-    fd_set *LastSelectMask = (fd_set *) pReadmask;
+    fd_set *last_select_mask = (fd_set *) pReadmask;
     fd_set devicesReadable;
 
     if (state == XDM_OFF)
         return;
     if (i > 0) {
-        if (FD_ISSET(xdmcpSocket, LastSelectMask)) {
+        if (FD_ISSET(xdmcpSocket, last_select_mask)) {
             receive_packet(xdmcpSocket);
-            FD_CLR(xdmcpSocket, LastSelectMask);
+            FD_CLR(xdmcpSocket, last_select_mask);
         }
 #if defined(IPv6) && defined(AF_INET6)
-        if (xdmcpSocket6 >= 0 && FD_ISSET(xdmcpSocket6, LastSelectMask)) {
+        if (xdmcpSocket6 >= 0 && FD_ISSET(xdmcpSocket6, last_select_mask)) {
             receive_packet(xdmcpSocket6);
-            FD_CLR(xdmcpSocket6, LastSelectMask);
+            FD_CLR(xdmcpSocket6, last_select_mask);
         }
 #endif
-        XFD_ANDSET(&devicesReadable, LastSelectMask, &EnabledDevices);
+        XFD_ANDSET(&devicesReadable, last_select_mask, &EnabledDevices);
         if (XFD_ANYSET(&devicesReadable)) {
             if (state == XDM_AWAIT_USER_INPUT)
                 restart();
@@ -709,12 +712,12 @@ XdmcpWakeupHandler(pointer data,        /* unused */
 
 static void
 XdmcpSelectHost(const struct sockaddr *host_sockaddr,
-                int host_len, ARRAY8Ptr AuthenticationName)
+                int host_len, ARRAY8Ptr auth_name)
 {
     state = XDM_START_CONNECTION;
     memmove(&req_sockaddr, host_sockaddr, host_len);
     req_socklen = host_len;
-    XdmcpSetAuthentication(AuthenticationName);
+    XdmcpSetAuthentication(auth_name);
     send_packet();
 }
 
@@ -727,9 +730,9 @@ XdmcpSelectHost(const struct sockaddr *host_sockaddr,
  /*ARGSUSED*/ static void
 XdmcpAddHost(const struct sockaddr *from,
              int fromlen,
-             ARRAY8Ptr AuthenticationName, ARRAY8Ptr hostname, ARRAY8Ptr status)
+             ARRAY8Ptr auth_name, ARRAY8Ptr hostname, ARRAY8Ptr status)
 {
-    XdmcpSelectHost(from, fromlen, AuthenticationName);
+    XdmcpSelectHost(from, fromlen, auth_name);
 }
 
 /*
@@ -751,7 +754,7 @@ receive_packet(int socketfd)
     XdmcpHeader header;
 
     /* read message off socket */
-    if (!XdmcpFill(socketfd, &buffer, (XdmcpNetaddr) & from, &fromlen))
+    if (!XdmcpFill(socketfd, &buffer, (XdmcpNetaddr) &from, &fromlen))
         return;
 
     /* reset retransmission backoff */
@@ -1055,11 +1058,9 @@ send_query_msg(void)
     XdmcpWriteHeader(&buffer, &header);
     XdmcpWriteARRAYofARRAY8(&buffer, &AuthenticationNames);
     if (broadcast) {
-        int i;
-
         for (i = 0; i < NumBroadcastAddresses; i++)
             XdmcpFlush(xdmcpSocket, &buffer,
-                       (XdmcpNetaddr) & BroadcastAddresses[i],
+                       (XdmcpNetaddr) &BroadcastAddresses[i],
                        sizeof(struct sockaddr_in));
     }
 #if defined(IPv6) && defined(AF_INET6)
@@ -1098,7 +1099,7 @@ send_query_msg(void)
         if (SOCKADDR_FAMILY(ManagerAddress) == AF_INET6)
             socketfd = xdmcpSocket6;
 #endif
-        XdmcpFlush(socketfd, &buffer, (XdmcpNetaddr) & ManagerAddress,
+        XdmcpFlush(socketfd, &buffer, (XdmcpNetaddr) &ManagerAddress,
                    ManagerAddressLen);
     }
 }
@@ -1223,7 +1224,7 @@ send_request_msg(void)
         socketfd = xdmcpSocket6;
 #endif
     if (XdmcpFlush(socketfd, &buffer,
-                   (XdmcpNetaddr) & req_sockaddr, req_socklen))
+                   (XdmcpNetaddr) &req_sockaddr, req_socklen))
         state = XDM_AWAIT_REQUEST_RESPONSE;
 }
 
@@ -1316,7 +1317,7 @@ send_manage_msg(void)
     if (SOCKADDR_FAMILY(req_sockaddr) == AF_INET6)
         socketfd = xdmcpSocket6;
 #endif
-    XdmcpFlush(socketfd, &buffer, (XdmcpNetaddr) & req_sockaddr, req_socklen);
+    XdmcpFlush(socketfd, &buffer, (XdmcpNetaddr) &req_sockaddr, req_socklen);
 }
 
 static void
@@ -1373,7 +1374,7 @@ send_keepalive_msg(void)
     if (SOCKADDR_FAMILY(req_sockaddr) == AF_INET6)
         socketfd = xdmcpSocket6;
 #endif
-    XdmcpFlush(socketfd, &buffer, (XdmcpNetaddr) & req_sockaddr, req_socklen);
+    XdmcpFlush(socketfd, &buffer, (XdmcpNetaddr) &req_sockaddr, req_socklen);
 }
 
 static void
@@ -1391,7 +1392,7 @@ recv_alive_msg(unsigned length)
         if (SessionRunning && AliveSessionID == SessionID) {
             /* backoff dormancy period */
             state = XDM_RUN_SESSION;
-            if ((GetTimeInMillis() - lastDeviceEventTime[XIAllDevices].milliseconds) >
+            if ((GetTimeInMillis() - LastEventTime(XIAllDevices).milliseconds) >
                 keepaliveDormancy * 1000) {
                 keepaliveDormancy <<= 1;
                 if (keepaliveDormancy > XDM_MAX_DORMANCY)

@@ -98,7 +98,7 @@ static void miPointerDeviceCleanup(DeviceIntPtr pDev, ScreenPtr pScreen);
 static void miPointerMoveNoEvent(DeviceIntPtr pDev, ScreenPtr pScreen, int x,
                                  int y);
 
-static InternalEvent *events;   /* for WarpPointer MotionNotifies */
+static InternalEvent *mipointermove_events;   /* for WarpPointer MotionNotifies */
 
 Bool
 miPointerInitialize(ScreenPtr pScreen,
@@ -118,13 +118,6 @@ miPointerInitialize(ScreenPtr pScreen,
         return FALSE;
     pScreenPriv->spriteFuncs = spriteFuncs;
     pScreenPriv->screenFuncs = screenFuncs;
-    /*
-     * check for uninitialized methods
-     */
-    if (!screenFuncs->EnqueueEvent)
-        screenFuncs->EnqueueEvent = mieqEnqueue;
-    if (!screenFuncs->NewEventScreen)
-        screenFuncs->NewEventScreen = mieqSwitchScreen;
     pScreenPriv->waitForUpdate = waitForUpdate;
     pScreenPriv->showTransparent = FALSE;
     pScreenPriv->CloseScreen = pScreen->CloseScreen;
@@ -143,7 +136,7 @@ miPointerInitialize(ScreenPtr pScreen,
     pScreen->DeviceCursorInitialize = miPointerDeviceInitialize;
     pScreen->DeviceCursorCleanup = miPointerDeviceCleanup;
 
-    events = NULL;
+    mipointermove_events = NULL;
     return TRUE;
 }
 
@@ -159,9 +152,9 @@ miPointerCloseScreen(ScreenPtr pScreen)
     SetupScreen(pScreen);
 
     pScreen->CloseScreen = pScreenPriv->CloseScreen;
-    free((pointer) pScreenPriv);
-    FreeEventList(events, GetMaximumEventsNum());
-    events = NULL;
+    free((void *) pScreenPriv);
+    FreeEventList(mipointermove_events, GetMaximumEventsNum());
+    mipointermove_events = NULL;
     return (*pScreen->CloseScreen) (pScreen);
 }
 
@@ -359,11 +352,10 @@ miPointerWarpCursor(DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y)
     miPointerPtr pPointer;
     BOOL changedScreen = FALSE;
 
-    SetupScreen(pScreen);
     pPointer = MIPOINTER(pDev);
 
     if (pPointer->pScreen != pScreen) {
-        (*pScreenPriv->screenFuncs->NewEventScreen) (pDev, pScreen, TRUE);
+        mieqSwitchScreen(pDev, pScreen, TRUE);
         changedScreen = TRUE;
     }
 
@@ -472,28 +464,17 @@ miPointerUpdateSprite(DeviceIntPtr pDev)
 void
 miPointerSetScreen(DeviceIntPtr pDev, int screen_no, int x, int y)
 {
-    miPointerScreenPtr pScreenPriv;
     ScreenPtr pScreen;
     miPointerPtr pPointer;
 
     pPointer = MIPOINTER(pDev);
 
     pScreen = screenInfo.screens[screen_no];
-    pScreenPriv = GetScreenPrivate(pScreen);
-    (*pScreenPriv->screenFuncs->NewEventScreen) (pDev, pScreen, FALSE);
+    mieqSwitchScreen(pDev, pScreen, FALSE);
     NewCurrentScreen(pDev, pScreen, x, y);
 
     pPointer->limits.x2 = pScreen->width;
     pPointer->limits.y2 = pScreen->height;
-}
-
-/**
- * @return The current screen of the VCP
- */
-ScreenPtr
-miPointerCurrentScreen(void)
-{
-    return miPointerGetScreen(inputInfo.pointer);
 }
 
 /**
@@ -565,23 +546,21 @@ miPointerMoveNoEvent(DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y)
  */
 ScreenPtr
 miPointerSetPosition(DeviceIntPtr pDev, int mode, double *screenx,
-                     double *screeny)
+                     double *screeny,
+                     int *nevents, InternalEvent* events)
 {
     miPointerScreenPtr pScreenPriv;
     ScreenPtr pScreen;
     ScreenPtr newScreen;
     int x, y;
     Bool switch_screen = FALSE;
+    Bool should_constrain_barriers = FALSE;
+    int i;
 
     miPointerPtr pPointer;
 
-    if (!pDev)
-        return NULL;
-
     pPointer = MIPOINTER(pDev);
     pScreen = pPointer->pScreen;
-    if (!pScreen)
-        return NULL;            /* called before ready */
 
     x = trunc(*screenx);
     y = trunc(*screeny);
@@ -593,6 +572,25 @@ miPointerSetPosition(DeviceIntPtr pDev, int mode, double *screenx,
     x -= pScreen->x;
     y -= pScreen->y;
 
+    should_constrain_barriers = (mode == Relative);
+
+    if (should_constrain_barriers) {
+        /* coordinates after clamped to a barrier */
+        int constrained_x, constrained_y;
+        int current_x, current_y; /* current position in per-screen coord */
+
+        current_x = MIPOINTER(pDev)->x - pScreen->y;
+        current_y = MIPOINTER(pDev)->y - pScreen->x;
+
+        input_constrain_cursor(pDev, pScreen,
+                               current_x, current_y, x, y,
+                               &constrained_x, &constrained_y,
+                               nevents, events);
+
+        x = constrained_x;
+        y = constrained_y;
+    }
+
     if (switch_screen) {
         pScreenPriv = GetScreenPrivate(pScreen);
         if (!pPointer->confined) {
@@ -600,8 +598,7 @@ miPointerSetPosition(DeviceIntPtr pDev, int mode, double *screenx,
             (*pScreenPriv->screenFuncs->CursorOffScreen) (&newScreen, &x, &y);
             if (newScreen != pScreen) {
                 pScreen = newScreen;
-                (*pScreenPriv->screenFuncs->NewEventScreen) (pDev, pScreen,
-                                                             FALSE);
+                mieqSwitchScreen(pDev, pScreen, FALSE);
                 /* Smash the confine to the new screen */
                 pPointer->limits.x2 = pScreen->width;
                 pPointer->limits.y2 = pScreen->height;
@@ -623,6 +620,18 @@ miPointerSetPosition(DeviceIntPtr pDev, int mode, double *screenx,
 
     if (pPointer->x != x || pPointer->y != y || pPointer->pScreen != pScreen)
         miPointerMoveNoEvent(pDev, pScreen, x, y);
+
+    /* check if we generated any barrier events and if so, update root x/y
+     * to the fully constrained coords */
+    if (should_constrain_barriers) {
+        for (i = 0; i < *nevents; i++) {
+            if (events[i].any.type == ET_BarrierHit ||
+                events[i].any.type == ET_BarrierLeave) {
+                events[i].barrier_event.root_x = x;
+                events[i].barrier_event.root_y = y;
+            }
+        }
+    }
 
     /* Convert to desktop coordinates again */
     x += pScreen->x;
@@ -681,17 +690,17 @@ miPointerMove(DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y)
     valuators[0] = x;
     valuators[1] = y;
 
-    if (!events) {
-        events = InitEventList(GetMaximumEventsNum());
+    if (!mipointermove_events) {
+        mipointermove_events = InitEventList(GetMaximumEventsNum());
 
-        if (!events) {
+        if (!mipointermove_events) {
             FatalError("Could not allocate event store.\n");
             return;
         }
     }
 
     valuator_mask_set_range(&mask, 0, 2, valuators);
-    nevents = GetPointerEvents(events, pDev, MotionNotify, 0,
+    nevents = GetPointerEvents(mipointermove_events, pDev, MotionNotify, 0,
                                POINTER_SCREEN | POINTER_ABSOLUTE |
                                POINTER_NORAW, &mask);
 
@@ -700,7 +709,7 @@ miPointerMove(DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y)
     darwinEvents_lock();
 #endif
     for (i = 0; i < nevents; i++)
-        mieqEnqueue(pDev, &events[i]);
+        mieqEnqueue(pDev, &mipointermove_events[i]);
 #ifdef XQUARTZ
     darwinEvents_unlock();
 #endif

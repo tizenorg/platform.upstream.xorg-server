@@ -39,12 +39,12 @@
 /* See Porting Layer Definition - p. 7 */
 void
 winWakeupHandler(ScreenPtr pScreen,
-                 unsigned long ulResult, pointer pReadmask)
+                 unsigned long ulResult, void *pReadmask)
 {
     MSG msg;
 
-    /* Process all messages on our queue */
-    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+    /* Process one message from our queue */
+    if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
         if ((g_hDlgDepthChange == 0
              || !IsDialogMessage(g_hDlgDepthChange, &msg))
             && (g_hDlgExit == 0 || !IsDialogMessage(g_hDlgExit, &msg))

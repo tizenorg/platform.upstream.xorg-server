@@ -220,10 +220,15 @@ UpdateCurrentTimeIf(void)
 
 #undef SMART_DEBUG
 
-#define SMART_SCHEDULE_DEFAULT_INTERVAL	20      /* ms */
-#define SMART_SCHEDULE_MAX_SLICE	200     /* ms */
+/* in milliseconds */
+#define SMART_SCHEDULE_DEFAULT_INTERVAL	5
+#define SMART_SCHEDULE_MAX_SLICE	15
 
+#if defined(WIN32) && !defined(__CYGWIN__)
+Bool SmartScheduleDisable = TRUE;
+#else
 Bool SmartScheduleDisable = FALSE;
+#endif
 long SmartScheduleSlice = SMART_SCHEDULE_DEFAULT_INTERVAL;
 long SmartScheduleInterval = SMART_SCHEDULE_DEFAULT_INTERVAL;
 long SmartScheduleMaxSlice = SMART_SCHEDULE_MAX_SLICE;
@@ -255,12 +260,11 @@ SmartScheduleClient(int *clientReady, int nready)
     for (i = 0; i < nready; i++) {
         client = clientReady[i];
         pClient = clients[client];
-        /* Praise clients which are idle */
-        if ((now - pClient->smart_check_tick) >= idle) {
+        /* Praise clients which haven't run in a while */
+        if ((now - pClient->smart_stop_tick) >= idle) {
             if (pClient->smart_priority < 0)
                 pClient->smart_priority++;
         }
-        pClient->smart_check_tick = now;
 
         /* check priority to select best client */
         robin =
@@ -461,10 +465,11 @@ Dispatch(void)
     free(clientReady);
     dispatchException &= ~DE_RESET;
     SmartScheduleLatencyLimited = 0;
+    ResetOsBuffers();
 }
 
 static int VendorRelease = VENDOR_RELEASE;
-static char *VendorString = VENDOR_NAME;
+static const char *VendorString = VENDOR_NAME;
 
 void
 SetVendorRelease(int release)
@@ -473,9 +478,9 @@ SetVendorRelease(int release)
 }
 
 void
-SetVendorString(char *string)
+SetVendorString(const char *vendor)
 {
-    VendorString = string;
+    VendorString = vendor;
 }
 
 Bool
@@ -646,7 +651,7 @@ ProcCreateWindow(ClientPtr client)
         Mask mask = pWin->eventMask;
 
         pWin->eventMask = 0;    /* subterfuge in case AddResource fails */
-        if (!AddResource(stuff->wid, RT_WINDOW, (pointer) pWin))
+        if (!AddResource(stuff->wid, RT_WINDOW, (void *) pWin))
             return BadAlloc;
         pWin->eventMask = mask;
     }
@@ -1063,7 +1068,7 @@ ProcGrabServer(ClientPtr client)
 
         grabinfo.client = client;
         grabinfo.grabstate = SERVER_GRABBED;
-        CallCallbacks(&ServerGrabCallback, (pointer) &grabinfo);
+        CallCallbacks(&ServerGrabCallback, (void *) &grabinfo);
     }
 
     return Success;
@@ -1090,7 +1095,7 @@ UngrabServer(ClientPtr client)
 
         grabinfo.client = client;
         grabinfo.grabstate = SERVER_UNGRABBED;
-        CallCallbacks(&ServerGrabCallback, (pointer) &grabinfo);
+        CallCallbacks(&ServerGrabCallback, (void *) &grabinfo);
     }
 }
 
@@ -1202,7 +1207,7 @@ ProcCloseFont(ClientPtr client)
     REQUEST(xResourceReq);
 
     REQUEST_SIZE_MATCH(xResourceReq);
-    rc = dixLookupResourceByType((pointer *) &pFont, stuff->id, RT_FONT,
+    rc = dixLookupResourceByType((void **) &pFont, stuff->id, RT_FONT,
                                  client, DixDestroyAccess);
     if (rc == Success) {
         FreeResource(stuff->id, RT_NONE);
@@ -1329,7 +1334,7 @@ ProcListFontsWithInfo(ClientPtr client)
  *  \param value must conform to DeleteType
  */
 int
-dixDestroyPixmap(pointer value, XID pid)
+dixDestroyPixmap(void *value, XID pid)
 {
     PixmapPtr pPixmap = (PixmapPtr) value;
 
@@ -1396,7 +1401,7 @@ ProcCreatePixmap(ClientPtr client)
             (*pDraw->pScreen->DestroyPixmap) (pMap);
             return rc;
         }
-        if (AddResource(stuff->pid, RT_PIXMAP, (pointer) pMap))
+        if (AddResource(stuff->pid, RT_PIXMAP, (void *) pMap))
             return Success;
     }
     return BadAlloc;
@@ -1411,7 +1416,7 @@ ProcFreePixmap(ClientPtr client)
     REQUEST(xResourceReq);
     REQUEST_SIZE_MATCH(xResourceReq);
 
-    rc = dixLookupResourceByType((pointer *) &pMap, stuff->id, RT_PIXMAP,
+    rc = dixLookupResourceByType((void **) &pMap, stuff->id, RT_PIXMAP,
                                  client, DixDestroyAccess);
     if (rc == Success) {
         FreeResource(stuff->id, RT_NONE);
@@ -1448,7 +1453,7 @@ ProcCreateGC(ClientPtr client)
                           stuff->gc, client);
     if (error != Success)
         return error;
-    if (!AddResource(stuff->gc, RT_GC, (pointer) pGC))
+    if (!AddResource(stuff->gc, RT_GC, (void *) pGC))
         return BadAlloc;
     return Success;
 }
@@ -1969,7 +1974,7 @@ ProcPutImage(ClientPtr client)
 static int
 DoGetImage(ClientPtr client, int format, Drawable drawable,
            int x, int y, int width, int height,
-           Mask planemask, xGetImageReply ** im_return)
+           Mask planemask)
 {
     DrawablePtr pDraw, pBoundingDraw;
     int nlines, linesPerBuf, rc;
@@ -2069,46 +2074,32 @@ DoGetImage(ClientPtr client, int format, Drawable drawable,
 
     xgi.length = length;
 
-    if (im_return) {
-        pBuf = calloc(1, sz_xGetImageReply + length);
-        if (!pBuf)
-            return BadAlloc;
-        if (widthBytesLine == 0)
-            linesPerBuf = 0;
-        else
-            linesPerBuf = height;
-        *im_return = (xGetImageReply *) pBuf;
-        *(xGetImageReply *) pBuf = xgi;
-        pBuf += sz_xGetImageReply;
-    }
+    xgi.length = bytes_to_int32(xgi.length);
+    if (widthBytesLine == 0 || height == 0)
+        linesPerBuf = 0;
+    else if (widthBytesLine >= IMAGE_BUFSIZE)
+        linesPerBuf = 1;
     else {
-        xgi.length = bytes_to_int32(xgi.length);
-        if (widthBytesLine == 0 || height == 0)
-            linesPerBuf = 0;
-        else if (widthBytesLine >= IMAGE_BUFSIZE)
-            linesPerBuf = 1;
-        else {
-            linesPerBuf = IMAGE_BUFSIZE / widthBytesLine;
-            if (linesPerBuf > height)
-                linesPerBuf = height;
-        }
-        length = linesPerBuf * widthBytesLine;
-        if (linesPerBuf < height) {
-            /* we have to make sure intermediate buffers don't need padding */
-            while ((linesPerBuf > 1) &&
-                   (length & ((1L << LOG2_BYTES_PER_SCANLINE_PAD) - 1))) {
-                linesPerBuf--;
-                length -= widthBytesLine;
-            }
-            while (length & ((1L << LOG2_BYTES_PER_SCANLINE_PAD) - 1)) {
-                linesPerBuf++;
-                length += widthBytesLine;
-            }
-        }
-        if (!(pBuf = calloc(1, length)))
-            return BadAlloc;
-        WriteReplyToClient(client, sizeof(xGetImageReply), &xgi);
+        linesPerBuf = IMAGE_BUFSIZE / widthBytesLine;
+        if (linesPerBuf > height)
+            linesPerBuf = height;
     }
+    length = linesPerBuf * widthBytesLine;
+    if (linesPerBuf < height) {
+        /* we have to make sure intermediate buffers don't need padding */
+        while ((linesPerBuf > 1) &&
+               (length & ((1L << LOG2_BYTES_PER_SCANLINE_PAD) - 1))) {
+            linesPerBuf--;
+            length -= widthBytesLine;
+        }
+        while (length & ((1L << LOG2_BYTES_PER_SCANLINE_PAD) - 1)) {
+            linesPerBuf++;
+            length += widthBytesLine;
+        }
+    }
+    if (!(pBuf = calloc(1, length)))
+        return BadAlloc;
+    WriteReplyToClient(client, sizeof(xGetImageReply), &xgi);
 
     if (pDraw->type == DRAWABLE_WINDOW) {
         pVisibleRegion = NotClippedByChildren((WindowPtr) pDraw);
@@ -2129,7 +2120,7 @@ DoGetImage(ClientPtr client, int format, Drawable drawable,
                                          y + linesDone,
                                          width,
                                          nlines,
-                                         format, planemask, (pointer) pBuf);
+                                         format, planemask, (void *) pBuf);
             if (pVisibleRegion)
                 XaceCensorImage(client, pVisibleRegion, widthBytesLine,
                                 pDraw, x, y + linesDone, width,
@@ -2137,13 +2128,10 @@ DoGetImage(ClientPtr client, int format, Drawable drawable,
 
             /* Note that this is NOT a call to WriteSwappedDataToClient,
                as we do NOT byte swap */
-            if (!im_return) {
-                ReformatImage(pBuf, (int) (nlines * widthBytesLine),
-                              BitsPerPixel(pDraw->depth), ClientOrder(client));
+            ReformatImage(pBuf, (int) (nlines * widthBytesLine),
+                          BitsPerPixel(pDraw->depth), ClientOrder(client));
 
-/* Don't split me, gcc pukes when you do */
-                WriteToClient(client, (int) (nlines * widthBytesLine), pBuf);
-            }
+            WriteToClient(client, (int) (nlines * widthBytesLine), pBuf);
             linesDone += nlines;
         }
     }
@@ -2159,7 +2147,7 @@ DoGetImage(ClientPtr client, int format, Drawable drawable,
                                                  y + linesDone,
                                                  width,
                                                  nlines,
-                                                 format, plane, (pointer) pBuf);
+                                                 format, plane, (void *) pBuf);
                     if (pVisibleRegion)
                         XaceCensorImage(client, pVisibleRegion,
                                         widthBytesLine,
@@ -2168,18 +2156,10 @@ DoGetImage(ClientPtr client, int format, Drawable drawable,
 
                     /* Note: NOT a call to WriteSwappedDataToClient,
                        as we do NOT byte swap */
-                    if (im_return) {
-                        pBuf += nlines * widthBytesLine;
-                    }
-                    else {
-                        ReformatImage(pBuf,
-                                      (int) (nlines * widthBytesLine),
-                                      1, ClientOrder(client));
+                    ReformatImage(pBuf, (int) (nlines * widthBytesLine),
+                                  1, ClientOrder(client));
 
-/* Don't split me, gcc pukes when you do */
-                        WriteToClient(client, (int) (nlines * widthBytesLine),
-				      pBuf);
-                    }
+                    WriteToClient(client, (int)(nlines * widthBytesLine), pBuf);
                     linesDone += nlines;
                 }
             }
@@ -2187,8 +2167,7 @@ DoGetImage(ClientPtr client, int format, Drawable drawable,
     }
     if (pVisibleRegion)
         RegionDestroy(pVisibleRegion);
-    if (!im_return)
-        free(pBuf);
+    free(pBuf);
     return Success;
 }
 
@@ -2202,7 +2181,7 @@ ProcGetImage(ClientPtr client)
     return DoGetImage(client, stuff->format, stuff->drawable,
                       stuff->x, stuff->y,
                       (int) stuff->width, (int) stuff->height,
-                      stuff->planeMask, (xGetImageReply **) NULL);
+                      stuff->planeMask);
 }
 
 int
@@ -2328,7 +2307,7 @@ ProcFreeColormap(ClientPtr client)
     REQUEST(xResourceReq);
 
     REQUEST_SIZE_MATCH(xResourceReq);
-    rc = dixLookupResourceByType((pointer *) &pmap, stuff->id, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pmap, stuff->id, RT_COLORMAP,
                                  client, DixDestroyAccess);
     if (rc == Success) {
         /* Freeing a default colormap is a no-op */
@@ -2354,7 +2333,7 @@ ProcCopyColormapAndFree(ClientPtr client)
     REQUEST_SIZE_MATCH(xCopyColormapAndFreeReq);
     mid = stuff->mid;
     LEGAL_NEW_RESOURCE(mid, client);
-    rc = dixLookupResourceByType((pointer *) &pSrcMap, stuff->srcCmap,
+    rc = dixLookupResourceByType((void **) &pSrcMap, stuff->srcCmap,
                                  RT_COLORMAP, client,
                                  DixReadAccess | DixRemoveAccess);
     if (rc == Success)
@@ -2372,7 +2351,7 @@ ProcInstallColormap(ClientPtr client)
     REQUEST(xResourceReq);
     REQUEST_SIZE_MATCH(xResourceReq);
 
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->id, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->id, RT_COLORMAP,
                                  client, DixInstallAccess);
     if (rc != Success)
         goto out;
@@ -2401,7 +2380,7 @@ ProcUninstallColormap(ClientPtr client)
     REQUEST(xResourceReq);
     REQUEST_SIZE_MATCH(xResourceReq);
 
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->id, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->id, RT_COLORMAP,
                                  client, DixUninstallAccess);
     if (rc != Success)
         goto out;
@@ -2450,7 +2429,7 @@ ProcListInstalledColormaps(ClientPtr client)
     preply->type = X_Reply;
     preply->sequenceNumber = client->sequence;
     nummaps = (*pWin->drawable.pScreen->ListInstalledColormaps)
-        (pWin->drawable.pScreen, (Colormap *) & preply[1]);
+        (pWin->drawable.pScreen, (Colormap *) &preply[1]);
     preply->nColormaps = nummaps;
     preply->length = nummaps;
     WriteReplyToClient(client, sizeof(xListInstalledColormapsReply), preply);
@@ -2469,7 +2448,7 @@ ProcAllocColor(ClientPtr client)
     REQUEST(xAllocColorReq);
 
     REQUEST_SIZE_MATCH(xAllocColorReq);
-    rc = dixLookupResourceByType((pointer *) &pmap, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pmap, stuff->cmap, RT_COLORMAP,
                                  client, DixAddAccess);
     if (rc == Success) {
         xAllocColorReply acr = {
@@ -2506,7 +2485,7 @@ ProcAllocNamedColor(ClientPtr client)
     REQUEST(xAllocNamedColorReq);
 
     REQUEST_FIXED_SIZE(xAllocNamedColorReq, stuff->nbytes);
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->cmap, RT_COLORMAP,
                                  client, DixAddAccess);
     if (rc == Success) {
         xAllocNamedColorReply ancr = {
@@ -2551,7 +2530,7 @@ ProcAllocColorCells(ClientPtr client)
     REQUEST(xAllocColorCellsReq);
 
     REQUEST_SIZE_MATCH(xAllocColorCellsReq);
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->cmap, RT_COLORMAP,
                                  client, DixAddAccess);
     if (rc == Success) {
         int npixels, nmasks;
@@ -2612,7 +2591,7 @@ ProcAllocColorPlanes(ClientPtr client)
     REQUEST(xAllocColorPlanesReq);
 
     REQUEST_SIZE_MATCH(xAllocColorPlanesReq);
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->cmap, RT_COLORMAP,
                                  client, DixAddAccess);
     if (rc == Success) {
         xAllocColorPlanesReply acpr;
@@ -2674,7 +2653,7 @@ ProcFreeColors(ClientPtr client)
     REQUEST(xFreeColorsReq);
 
     REQUEST_AT_LEAST_SIZE(xFreeColorsReq);
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->cmap, RT_COLORMAP,
                                  client, DixRemoveAccess);
     if (rc == Success) {
         int count;
@@ -2700,7 +2679,7 @@ ProcStoreColors(ClientPtr client)
     REQUEST(xStoreColorsReq);
 
     REQUEST_AT_LEAST_SIZE(xStoreColorsReq);
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->cmap, RT_COLORMAP,
                                  client, DixWriteAccess);
     if (rc == Success) {
         int count;
@@ -2726,7 +2705,7 @@ ProcStoreNamedColor(ClientPtr client)
     REQUEST(xStoreNamedColorReq);
 
     REQUEST_FIXED_SIZE(xStoreNamedColorReq, stuff->nbytes);
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->cmap, RT_COLORMAP,
                                  client, DixWriteAccess);
     if (rc == Success) {
         xColorItem def;
@@ -2754,7 +2733,7 @@ ProcQueryColors(ClientPtr client)
     REQUEST(xQueryColorsReq);
 
     REQUEST_AT_LEAST_SIZE(xQueryColorsReq);
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->cmap, RT_COLORMAP,
                                  client, DixReadAccess);
     if (rc == Success) {
         int count;
@@ -2801,7 +2780,7 @@ ProcLookupColor(ClientPtr client)
     REQUEST(xLookupColorReq);
 
     REQUEST_FIXED_SIZE(xLookupColorReq, stuff->nbytes);
-    rc = dixLookupResourceByType((pointer *) &pcmp, stuff->cmap, RT_COLORMAP,
+    rc = dixLookupResourceByType((void **) &pcmp, stuff->cmap, RT_COLORMAP,
                                  client, DixReadAccess);
     if (rc == Success) {
         CARD16 exactRed, exactGreen, exactBlue;
@@ -2852,25 +2831,32 @@ ProcCreateCursor(ClientPtr client)
     REQUEST_SIZE_MATCH(xCreateCursorReq);
     LEGAL_NEW_RESOURCE(stuff->cid, client);
 
-    rc = dixLookupResourceByType((pointer *) &src, stuff->source, RT_PIXMAP,
+    rc = dixLookupResourceByType((void **) &src, stuff->source, RT_PIXMAP,
                                  client, DixReadAccess);
     if (rc != Success) {
         client->errorValue = stuff->source;
         return rc;
     }
 
-    rc = dixLookupResourceByType((pointer *) &msk, stuff->mask, RT_PIXMAP,
-                                 client, DixReadAccess);
-    if (rc != Success) {
-        if (stuff->mask != None) {
+    if (src->drawable.depth != 1)
+        return (BadMatch);
+
+    /* Find and validate cursor mask pixmap, if one is provided */
+    if (stuff->mask != None) {
+        rc = dixLookupResourceByType((void **) &msk, stuff->mask, RT_PIXMAP,
+                                     client, DixReadAccess);
+        if (rc != Success) {
             client->errorValue = stuff->mask;
             return rc;
         }
+
+        if (src->drawable.width != msk->drawable.width
+            || src->drawable.height != msk->drawable.height
+            || src->drawable.depth != 1 || msk->drawable.depth != 1)
+            return BadMatch;
     }
-    else if (src->drawable.width != msk->drawable.width
-             || src->drawable.height != msk->drawable.height
-             || src->drawable.depth != 1 || msk->drawable.depth != 1)
-        return BadMatch;
+    else
+        msk = NULL;
 
     width = src->drawable.width;
     height = src->drawable.height;
@@ -2889,7 +2875,7 @@ ProcCreateCursor(ClientPtr client)
     }
 
     (*src->drawable.pScreen->GetImage) ((DrawablePtr) src, 0, 0, width, height,
-                                        XYPixmap, 1, (pointer) srcbits);
+                                        XYPixmap, 1, (void *) srcbits);
     if (msk == (PixmapPtr) NULL) {
         unsigned char *bits = mskbits;
 
@@ -2901,7 +2887,7 @@ ProcCreateCursor(ClientPtr client)
         memset((char *) mskbits, 0, n);
         (*msk->drawable.pScreen->GetImage) ((DrawablePtr) msk, 0, 0, width,
                                             height, XYPixmap, 1,
-                                            (pointer) mskbits);
+                                            (void *) mskbits);
     }
     cm.width = width;
     cm.height = height;
@@ -2914,7 +2900,7 @@ ProcCreateCursor(ClientPtr client)
 
     if (rc != Success)
         goto bail;
-    if (!AddResource(stuff->cid, RT_CURSOR, (pointer) pCursor)) {
+    if (!AddResource(stuff->cid, RT_CURSOR, (void *) pCursor)) {
         rc = BadAlloc;
         goto bail;
     }
@@ -2944,7 +2930,7 @@ ProcCreateGlyphCursor(ClientPtr client)
                            &pCursor, client, stuff->cid);
     if (res != Success)
         return res;
-    if (AddResource(stuff->cid, RT_CURSOR, (pointer) pCursor))
+    if (AddResource(stuff->cid, RT_CURSOR, (void *) pCursor))
         return Success;
     return BadAlloc;
 }
@@ -2958,7 +2944,7 @@ ProcFreeCursor(ClientPtr client)
     REQUEST(xResourceReq);
 
     REQUEST_SIZE_MATCH(xResourceReq);
-    rc = dixLookupResourceByType((pointer *) &pCursor, stuff->id, RT_CURSOR,
+    rc = dixLookupResourceByType((void **) &pCursor, stuff->id, RT_CURSOR,
                                  client, DixDestroyAccess);
     if (rc == Success) {
         FreeResource(stuff->id, RT_NONE);
@@ -3107,10 +3093,10 @@ ProcChangeHosts(ClientPtr client)
 
     if (stuff->mode == HostInsert)
         return AddHost(client, (int) stuff->hostFamily,
-                       stuff->hostLength, (pointer) &stuff[1]);
+                       stuff->hostLength, (void *) &stuff[1]);
     if (stuff->mode == HostDelete)
         return RemoveHost(client, (int) stuff->hostFamily,
-                          stuff->hostLength, (pointer) &stuff[1]);
+                          stuff->hostLength, (void *) &stuff[1]);
     client->errorValue = stuff->mode;
     return BadValue;
 }
@@ -3121,7 +3107,7 @@ ProcListHosts(ClientPtr client)
     xListHostsReply reply;
     int len, nHosts, result;
     BOOL enabled;
-    pointer pdata;
+    void *pdata;
 
     /* REQUEST(xListHostsReq); */
 
@@ -3362,7 +3348,7 @@ CloseDownClient(ClientPtr client)
                 clientinfo.client = client;
                 clientinfo.prefix = (xConnSetupPrefix *) NULL;
                 clientinfo.setup = (xConnSetup *) NULL;
-                CallCallbacks((&ClientStateCallback), (pointer) &clientinfo);
+                CallCallbacks((&ClientStateCallback), (void *) &clientinfo);
             }
         }
         client->clientGone = TRUE;      /* so events aren't sent to client */
@@ -3392,8 +3378,9 @@ CloseDownClient(ClientPtr client)
             clientinfo.client = client;
             clientinfo.prefix = (xConnSetupPrefix *) NULL;
             clientinfo.setup = (xConnSetup *) NULL;
-            CallCallbacks((&ClientStateCallback), (pointer) &clientinfo);
+            CallCallbacks((&ClientStateCallback), (void *) &clientinfo);
         }
+        TouchListenerGone(client->clientAsMask);
         FreeClientResources(client);
         /* Disable client ID tracking. This must be done after
          * ClientStateCallback. */
@@ -3426,7 +3413,7 @@ KillAllClients(void)
 }
 
 void
-InitClient(ClientPtr client, int i, pointer ospriv)
+InitClient(ClientPtr client, int i, void *ospriv)
 {
     client->index = i;
     client->clientAsMask = ((Mask) i) << CLIENTOFFSET;
@@ -3436,7 +3423,6 @@ InitClient(ClientPtr client, int i, pointer ospriv)
     QueryMinMaxKeyCodes(&client->minKC, &client->maxKC);
     client->smart_start_tick = SmartScheduleTime;
     client->smart_stop_tick = SmartScheduleTime;
-    client->smart_check_tick = SmartScheduleTime;
     client->clientIds = NULL;
 }
 
@@ -3448,7 +3434,7 @@ InitClient(ClientPtr client, int i, pointer ospriv)
  *************************/
 
 ClientPtr
-NextAvailableClient(pointer ospriv)
+NextAvailableClient(void *ospriv)
 {
     int i;
     ClientPtr client;
@@ -3488,7 +3474,7 @@ NextAvailableClient(pointer ospriv)
         clientinfo.client = client;
         clientinfo.prefix = (xConnSetupPrefix *) NULL;
         clientinfo.setup = (xConnSetup *) NULL;
-        CallCallbacks((&ClientStateCallback), (pointer) &clientinfo);
+        CallCallbacks((&ClientStateCallback), (void *) &clientinfo);
     }
     return client;
 }
@@ -3499,20 +3485,25 @@ ProcInitialConnection(ClientPtr client)
     REQUEST(xReq);
     xConnClientPrefix *prefix;
     int whichbyte = 1;
+    char order;
 
-    prefix = (xConnClientPrefix *) ((char *) stuff + sz_xReq);
-    if ((prefix->byteOrder != 'l') && (prefix->byteOrder != 'B'))
-        return client->noClientException = -1;
-    if (((*(char *) &whichbyte) && (prefix->byteOrder == 'B')) ||
-        (!(*(char *) &whichbyte) && (prefix->byteOrder == 'l'))) {
-        client->swapped = TRUE;
-        SwapConnClientPrefix(prefix);
+    prefix = (xConnClientPrefix *) ((char *)stuff + sz_xReq);
+    order = prefix->byteOrder;
+    if (order != 'l' && order != 'B' && order != 'r' && order != 'R')
+	return client->noClientException = -1;
+    if (((*(char *) &whichbyte) && (order == 'B' || order == 'R')) ||
+	(!(*(char *) &whichbyte) && (order == 'l' || order == 'r'))) {
+	client->swapped = TRUE;
+	SwapConnClientPrefix(prefix);
     }
     stuff->reqType = 2;
     stuff->length += bytes_to_int32(prefix->nbytesAuthProto) +
         bytes_to_int32(prefix->nbytesAuthString);
     if (client->swapped) {
         swaps(&stuff->length);
+    }
+    if (order == 'r' || order == 'R') {
+	client->local = FALSE;
     }
     ResetCurrentRequest(client);
     return Success;
@@ -3603,7 +3594,7 @@ SendConnSetup(ClientPtr client, const char *reason)
         clientinfo.client = client;
         clientinfo.prefix = lconnSetupPrefix;
         clientinfo.setup = (xConnSetup *) lConnectionInfo;
-        CallCallbacks((&ClientStateCallback), (pointer) &clientinfo);
+        CallCallbacks((&ClientStateCallback), (void *) &clientinfo);
     }
     return Success;
 }
@@ -3933,7 +3924,6 @@ void
 AttachOutputGPU(ScreenPtr pScreen, ScreenPtr new)
 {
     assert(new->isGPU);
-    assert(!new->current_master);
     xorg_list_add(&new->output_head, &pScreen->output_slave_list);
     new->current_master = pScreen;
 }
@@ -3950,7 +3940,6 @@ void
 AttachOffloadGPU(ScreenPtr pScreen, ScreenPtr new)
 {
     assert(new->isGPU);
-    assert(!new->current_master);
     xorg_list_add(&new->offload_head, &pScreen->offload_slave_list);
     new->current_master = pScreen;
 }

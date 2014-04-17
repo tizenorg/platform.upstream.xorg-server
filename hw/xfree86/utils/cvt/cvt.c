@@ -24,6 +24,7 @@
 /* Standalone VESA CVT standard timing modelines generator. */
 
 #include "xf86.h"
+#include "xf86Modes.h"
 
 /* FatalError implementation used by the server code we built in */
 void
@@ -38,10 +39,10 @@ FatalError(const char *f, ...)
 }
 
 /* xnfalloc implementation used by the server code we built in */
-pointer
+void *
 XNFalloc(unsigned long n)
 {
-    pointer r;
+    void *r;
 
     r = malloc(n);
     if (!r) {
@@ -52,10 +53,10 @@ XNFalloc(unsigned long n)
 }
 
 /* xnfcalloc implementation used by the server code we built in */
-pointer
+void *
 XNFcalloc(unsigned long n)
 {
-    pointer r;
+    void *r;
 
     r = calloc(1, n);
     if (!r) {

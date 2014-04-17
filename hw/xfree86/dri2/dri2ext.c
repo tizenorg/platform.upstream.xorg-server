@@ -630,7 +630,7 @@ ProcDRI2Dispatch(ClientPtr client)
         return ProcDRI2QueryVersion(client);
     }
 
-    if (!LocalClient(client))
+    if (!client->local)
         return BadRequest;
 
     switch (stuff->data) {
@@ -717,6 +717,11 @@ void
 DRI2ExtensionInit(void)
 {
     ExtensionEntry *dri2Extension;
+
+#ifdef PANORAMIX
+    if (!noPanoramiXExtension)
+        return;
+#endif
 
     dri2Extension = AddExtension(DRI2_NAME,
                                  DRI2NumberEvents,

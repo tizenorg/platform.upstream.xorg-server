@@ -119,7 +119,7 @@ struct xorg_list {
  *
  * @param The list to initialized.
  */
-static void
+static inline void
 xorg_list_init(struct xorg_list *list)
 {
     list->next = list->prev = list;
@@ -213,7 +213,7 @@ xorg_list_del(struct xorg_list *entry)
  *
  * @return True if the list contains one or more elements or False otherwise.
  */
-static inline Bool
+static inline int
 xorg_list_is_empty(struct xorg_list *head)
 {
     return head->next == head;
@@ -358,7 +358,7 @@ xorg_list_is_empty(struct xorg_list *head)
  * struct foo *element = list;
  * while ((element = nt_list_next(element, next)) { }
  *
- * This macro is not safe for node deletion. Use xorg_list_for_each_entry_safe
+ * This macro is not safe for node deletion. Use nt_list_for_each_entry_safe
  * instead.
  *
  * @param list The list or current element.

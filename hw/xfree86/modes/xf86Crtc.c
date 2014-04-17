@@ -185,10 +185,10 @@ xf86CrtcSetScreenSubpixelOrder(ScreenPtr pScreen)
     Bool has_none = FALSE;
     ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
     xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
-    int c, o;
+    int icrtc, o;
 
-    for (c = 0; c < xf86_config->num_crtc; c++) {
-        xf86CrtcPtr crtc = xf86_config->crtc[c];
+    for (icrtc = 0; icrtc < xf86_config->num_crtc; icrtc++) {
+        xf86CrtcPtr crtc = xf86_config->crtc[icrtc];
 
         for (o = 0; o < xf86_config->num_output; o++) {
             xf86OutputPtr output = xf86_config->output[o];
@@ -216,20 +216,20 @@ xf86CrtcSetScreenSubpixelOrder(ScreenPtr pScreen)
                 SubPixelVerticalBGR,
             };
             int rotate;
-            int c;
+            int sc;
 
             for (rotate = 0; rotate < 4; rotate++)
                 if (crtc->rotation & (1 << rotate))
                     break;
-            for (c = 0; c < 4; c++)
-                if (circle[c] == subpixel_order)
+            for (sc = 0; sc < 4; sc++)
+                if (circle[sc] == subpixel_order)
                     break;
-            c = (c + rotate) & 0x3;
-            if ((crtc->rotation & RR_Reflect_X) && !(c & 1))
-                c ^= 2;
-            if ((crtc->rotation & RR_Reflect_Y) && (c & 1))
-                c ^= 2;
-            subpixel_order = circle[c];
+            sc = (sc + rotate) & 0x3;
+            if ((crtc->rotation & RR_Reflect_X) && !(sc & 1))
+                sc ^= 2;
+            if ((crtc->rotation & RR_Reflect_Y) && (sc & 1))
+                sc ^= 2;
+            subpixel_order = circle[sc];
             break;
         }
     }
@@ -379,7 +379,7 @@ xf86CrtcSetModeTransform(xf86CrtcPtr crtc, DisplayModePtr mode,
         crtc->transformPresent = saved_transform_present;
     }
 
-    free(adjusted_mode->name);
+    free((void *) adjusted_mode->name);
     free(adjusted_mode);
 
     if (didLock)
@@ -428,6 +428,7 @@ extern XF86ConfigPtr xf86configptr;
 
 typedef enum {
     OPTION_PREFERRED_MODE,
+    OPTION_ZOOM_MODES,
     OPTION_POSITION,
     OPTION_BELOW,
     OPTION_RIGHT_OF,
@@ -446,6 +447,7 @@ typedef enum {
 
 static OptionInfoRec xf86OutputOptions[] = {
     {OPTION_PREFERRED_MODE, "PreferredMode", OPTV_STRING, {0}, FALSE},
+    {OPTION_ZOOM_MODES, "ZoomModes", OPTV_STRING, {0}, FALSE },
     {OPTION_POSITION, "Position", OPTV_STRING, {0}, FALSE},
     {OPTION_BELOW, "Below", OPTV_STRING, {0}, FALSE},
     {OPTION_RIGHT_OF, "RightOf", OPTV_STRING, {0}, FALSE},
@@ -562,8 +564,8 @@ static const char *direction[4] = {
 static Rotation
 xf86OutputInitialRotation(xf86OutputPtr output)
 {
-    char *rotate_name = xf86GetOptValString(output->options,
-                                            OPTION_ROTATE);
+    const char *rotate_name = xf86GetOptValString(output->options,
+                                                  OPTION_ROTATE);
     int i;
 
     if (!rotate_name) {
@@ -924,7 +926,6 @@ xf86PickCrtcs(ScrnInfoPtr scrn,
     xf86OutputPtr output;
     xf86CrtcPtr crtc;
     xf86CrtcPtr *crtcs;
-    xf86CrtcPtr best_crtc;
     int best_score;
     int score;
     int my_score;
@@ -937,7 +938,6 @@ xf86PickCrtcs(ScrnInfoPtr scrn,
      * Compute score with this output disabled
      */
     best_crtcs[n] = NULL;
-    best_crtc = NULL;
     best_score = xf86PickCrtcs(scrn, best_crtcs, modes, n + 1, width, height);
     if (modes[n] == NULL)
         return best_score;
@@ -991,7 +991,6 @@ xf86PickCrtcs(ScrnInfoPtr scrn,
         score =
             my_score + xf86PickCrtcs(scrn, crtcs, modes, n + 1, width, height);
         if (score > best_score) {
-            best_crtc = crtc;
             best_score = score;
             memcpy(best_crtcs, crtcs, config->num_output * sizeof(xf86CrtcPtr));
         }
@@ -1085,8 +1084,8 @@ xf86UserConfiguredOutputs(ScrnInfoPtr scrn, DisplayModePtr * modes)
 
     for (o = 0; o < config->num_output; o++) {
         xf86OutputPtr output = config->output[o];
-        char *position;
-        char *relative_name;
+        const char *position;
+        const char *relative_name;
         OutputOpts relation;
         int r;
 
@@ -1143,8 +1142,8 @@ xf86InitialOutputPositions(ScrnInfoPtr scrn, DisplayModePtr * modes)
             };
             xf86OutputPtr output = config->output[o];
             xf86OutputPtr relative;
-            char *relative_name;
-            char *position;
+            const char *relative_name;
+            const char *position;
             OutputOpts relation;
             int r;
 
@@ -1304,7 +1303,7 @@ xf86InitialPanning(ScrnInfoPtr scrn)
 
     for (o = 0; o < config->num_output; o++) {
         xf86OutputPtr output = config->output[o];
-        char *panning = xf86GetOptValString(output->options, OPTION_PANNING);
+        const char *panning = xf86GetOptValString(output->options, OPTION_PANNING);
         int width, height, left, top;
         int track_width, track_height, track_left, track_top;
         int brdr[4];
@@ -1387,7 +1386,7 @@ xf86SortModes(DisplayModePtr input)
     for (o = output; o && (n = o->next); o = n) {
         if (!strcmp(o->name, n->name) && xf86ModesEqual(o, n)) {
             o->next = n->next;
-            free(n->name);
+            free((void *) n->name);
             free(n);
             n = o;
         }
@@ -1401,10 +1400,10 @@ xf86SortModes(DisplayModePtr input)
     return output;
 }
 
-static char *
+static const char *
 preferredMode(ScrnInfoPtr pScrn, xf86OutputPtr output)
 {
-    char *preferred_mode = NULL;
+    const char *preferred_mode = NULL;
 
     /* Check for a configured preference for a particular mode */
     preferred_mode = xf86GetOptValString(output->options,
@@ -1416,6 +1415,90 @@ preferredMode(ScrnInfoPtr pScrn, xf86OutputPtr output)
         preferred_mode = *pScrn->display->modes;
 
     return preferred_mode;
+}
+
+/** identify a token
+ * args
+ *   *src     a string with zero or more tokens, e.g. "tok0 tok1",
+ *   **token  stores a pointer to the first token character,
+ *   *len     stores the token length.
+ * return
+ *   a pointer into src[] at the token terminating character, or
+ *   NULL if no token is found.
+ */
+static const char *
+gettoken(const char *src, const char **token, int *len)
+{
+    const char *delim = " \t";
+    int skip;
+
+    if (!src)
+        return NULL;
+
+    skip = strspn(src, delim);
+    *token = &src[skip];
+
+    *len = strcspn(*token, delim);
+    /* Support for backslash escaped delimiters could be implemented
+     * here.
+     */
+
+    /* (*token)[0] != '\0'  <==>  *len > 0 */
+    if (*len > 0)
+        return &(*token)[*len];
+    else
+        return NULL;
+}
+
+/** Check for a user configured zoom mode list, Option "ZoomModes":
+ *
+ * Section "Monitor"
+ *   Identifier "a21inch"
+ *   Option "ZoomModes" "1600x1200 1280x1024 1280x1024 640x480"
+ * EndSection
+ *
+ * Each user mode name is searched for independently so the list
+ * specification order is free.  An output mode is matched at most
+ * once, a mode with an already set M_T_USERDEF type bit is skipped.
+ * Thus a repeat mode name specification matches the next output mode
+ * with the same name.
+ *
+ * Ctrl+Alt+Keypad-{Plus,Minus} zooms {in,out} by selecting the
+ * {next,previous} M_T_USERDEF mode in the screen modes list, itself
+ * sorted toward lower dot area or lower dot clock frequency, see
+ *   modes/xf86Crtc.c: xf86SortModes() xf86SetScrnInfoModes(), and
+ *   common/xf86Cursor.c: xf86ZoomViewport().
+ */
+static int
+processZoomModes(xf86OutputPtr output)
+{
+    const char *zoom_modes;
+    int count = 0;
+
+    zoom_modes = xf86GetOptValString(output->options, OPTION_ZOOM_MODES);
+
+    if (zoom_modes) {
+        const char *token, *next;
+        int len;
+
+        next = gettoken(zoom_modes, &token, &len);
+        while (next) {
+            DisplayModePtr mode;
+
+            for (mode = output->probed_modes; mode; mode = mode->next)
+                if (!strncmp(token, mode->name, len)  /* prefix match */
+                    && mode->name[len] == '\0'        /* equal length */
+                    && !(mode->type & M_T_USERDEF)) { /* no rematch */
+                    mode->type |= M_T_USERDEF;
+                    break;
+                }
+
+            count++;
+            next = gettoken(next, &token, &len);
+        }
+    }
+
+    return count;
 }
 
 static void
@@ -1524,7 +1607,7 @@ xf86ProbeOutputModes(ScrnInfoPtr scrn, int maxX, int maxY)
         xf86OutputPtr output = config->output[o];
         DisplayModePtr mode;
         DisplayModePtr config_modes = NULL, output_modes, default_modes = NULL;
-        char *preferred_mode;
+        const char *preferred_mode;
         xf86MonPtr edid_monitor;
         XF86ConfMonitorPtr conf_monitor;
         MonRec mon_rec;
@@ -1590,6 +1673,7 @@ xf86ProbeOutputModes(ScrnInfoPtr scrn, int maxX, int maxY)
         if (edid_monitor) {
             struct det_monrec_parameter p;
             struct disp_features *features = &edid_monitor->features;
+            struct cea_data_block *hdmi_db;
 
             /* if display is not continuous-frequency, don't add default modes */
             if (!GTF_SUPPORTED(features->msc))
@@ -1602,6 +1686,16 @@ xf86ProbeOutputModes(ScrnInfoPtr scrn, int maxX, int maxY)
             p.sync_source = &sync_source;
 
             xf86ForEachDetailedBlock(edid_monitor, handle_detailed_monrec, &p);
+
+            /* Look at the CEA HDMI vendor block for the max TMDS freq */
+            hdmi_db = xf86MonitorFindHDMIBlock(edid_monitor);
+            if (hdmi_db && hdmi_db->len >= 7) {
+                int tmds_freq = hdmi_db->u.vendor.hdmi.max_tmds_clock * 5000;
+                xf86DrvMsg(scrn->scrnIndex, X_PROBED,
+                           "HDMI max TMDS frequency %dKHz\n", tmds_freq);
+                if (tmds_freq > max_clock)
+                    max_clock = tmds_freq;
+            }
         }
 
         if (xf86GetOptValFreq(output->options, OPTION_MIN_CLOCK,
@@ -1713,6 +1807,9 @@ xf86ProbeOutputModes(ScrnInfoPtr scrn, int maxX, int maxY)
             }
         }
 
+        /* Ctrl+Alt+Keypad-{Plus,Minus} zoom mode: M_T_USERDEF mode type */
+        processZoomModes(output);
+
         output->initial_rotation = xf86OutputInitialRotation(output);
 
         if (debug_modes) {
@@ -1744,10 +1841,6 @@ xf86ProbeOutputModes(ScrnInfoPtr scrn, int maxX, int maxY)
  * Copy one of the output mode lists to the ScrnInfo record
  */
 
-/* XXX where does this function belong? Here? */
-void
- xf86RandR12GetOriginalVirtualSize(ScrnInfoPtr scrn, int *x, int *y);
-
 static DisplayModePtr
 biggestMode(DisplayModePtr a, DisplayModePtr b)
 {
@@ -1773,6 +1866,9 @@ SetCompatOutput(xf86CrtcConfigPtr config)
     xf86OutputPtr output = NULL, test = NULL;
     DisplayModePtr maxmode = NULL, testmode, mode;
     int o, compat = -1, count, mincount = 0;
+
+    if (config->num_output == 0)
+        return NULL;
 
     /* Look for one that's definitely connected */
     for (o = 0; o < config->num_output; o++) {
@@ -1840,8 +1936,10 @@ SetCompatOutput(xf86CrtcConfigPtr config)
     }
 
     /* All outputs are disconnected, select one to fake */
-    if (!output && config->num_output)
-        output = config->output[0];
+    if (!output && config->num_output) {
+        config->compat_output = 0;
+        output = config->output[config->compat_output];
+    }
 
     return output;
 }
@@ -1905,6 +2003,14 @@ xf86CollectEnabledOutputs(ScrnInfoPtr scrn, xf86CrtcConfigPtr config,
 {
     Bool any_enabled = FALSE;
     int o;
+
+    /*
+     * Don't bother enabling outputs on GPU screens: a client needs to attach
+     * it to a source provider before setting a mode that scans out a shared
+     * pixmap.
+     */
+    if (scrn->is_gpu)
+        return FALSE;
 
     for (o = 0; o < config->num_output; o++)
         any_enabled |= enabled[o] = xf86OutputEnabled(config->output[o], TRUE);
@@ -2042,10 +2148,10 @@ xf86TargetPreferred(ScrnInfoPtr scrn, xf86CrtcConfigPtr config,
                 }
                 else {
                     for (mode = output->probed_modes; mode; mode = mode->next) {
-                        Rotation r = output->initial_rotation;
+                        Rotation ir = output->initial_rotation;
 
-                        if (xf86ModeWidth(mode, r) == pref_width &&
-                            xf86ModeHeight(mode, r) == pref_height) {
+                        if (xf86ModeWidth(mode, ir) == pref_width &&
+                            xf86ModeHeight(mode, ir) == pref_height) {
                             preferred[o] = mode;
                             match = TRUE;
                         }
@@ -2358,11 +2464,11 @@ xf86InitialConfiguration(ScrnInfoPtr scrn, Bool canGrow)
     config->debug_modes = xf86ReturnOptValBool(config->options,
                                                OPTION_MODEDEBUG, FALSE);
 
-    if (scrn->display->virtualX)
+    if (scrn->display->virtualX && !scrn->is_gpu)
         width = scrn->display->virtualX;
     else
         width = config->maxWidth;
-    if (scrn->display->virtualY)
+    if (scrn->display->virtualY && !scrn->is_gpu)
         height = scrn->display->virtualY;
     else
         height = config->maxHeight;
@@ -2375,9 +2481,11 @@ xf86InitialConfiguration(ScrnInfoPtr scrn, Bool canGrow)
 
     ret = xf86CollectEnabledOutputs(scrn, config, enabled);
     if (ret == FALSE && canGrow) {
-        xf86DrvMsg(i, X_WARNING,
-                   "Unable to find connected outputs - setting %dx%d initial framebuffer\n",
-                   NO_OUTPUT_DEFAULT_WIDTH, NO_OUTPUT_DEFAULT_HEIGHT);
+        if (!scrn->is_gpu)
+            xf86DrvMsg(i, X_WARNING,
+		       "Unable to find connected outputs - setting %dx%d "
+                       "initial framebuffer\n",
+                       NO_OUTPUT_DEFAULT_WIDTH, NO_OUTPUT_DEFAULT_HEIGHT);
         have_outputs = FALSE;
     }
     else {
@@ -2426,8 +2534,10 @@ xf86InitialConfiguration(ScrnInfoPtr scrn, Bool canGrow)
 
     /* XXX override xf86 common frame computation code */
 
-    scrn->display->frameX0 = 0;
-    scrn->display->frameY0 = 0;
+    if (!scrn->is_gpu) {
+        scrn->display->frameX0 = 0;
+        scrn->display->frameY0 = 0;
+    }
 
     for (c = 0; c < config->num_crtc; c++) {
         xf86CrtcPtr crtc = config->crtc[c];
@@ -2475,7 +2585,7 @@ xf86InitialConfiguration(ScrnInfoPtr scrn, Bool canGrow)
         }
     }
 
-    if (scrn->display->virtualX == 0) {
+    if (scrn->display->virtualX == 0 || scrn->is_gpu) {
         /*
          * Expand virtual size to cover the current config and potential mode
          * switches, if the driver can't enlarge the screen later.
@@ -2490,8 +2600,10 @@ xf86InitialConfiguration(ScrnInfoPtr scrn, Bool canGrow)
             }
         }
 
-        scrn->display->virtualX = width;
-        scrn->display->virtualY = height;
+	if (!scrn->is_gpu) {
+            scrn->display->virtualX = width;
+            scrn->display->virtualY = height;
+	}
     }
 
     if (width > scrn->virtualX)
@@ -2596,6 +2708,7 @@ xf86SetDesiredModes(ScrnInfoPtr scrn)
 {
     xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
     xf86CrtcPtr crtc = config->crtc[0];
+    int enabled = 0, failed = 0;
     int c;
 
     /* A driver with this hook will take care of this */
@@ -2647,14 +2760,21 @@ xf86SetDesiredModes(ScrnInfoPtr scrn)
             transform = &crtc->desiredTransform;
         else
             transform = NULL;
-        if (!xf86CrtcSetModeTransform
+        if (xf86CrtcSetModeTransform
             (crtc, &crtc->desiredMode, crtc->desiredRotation, transform,
-             crtc->desiredX, crtc->desiredY))
-            return FALSE;
+             crtc->desiredX, crtc->desiredY)) {
+            ++enabled;
+        } else {
+            for (o = 0; o < config->num_output; o++)
+                if (config->output[o]->crtc == crtc)
+                    config->output[o]->crtc = NULL;
+            crtc->enabled = FALSE;
+            ++failed;
+	}
     }
 
     xf86DisableUnusedFunctions(scrn);
-    return TRUE;
+    return enabled != 0 || failed == 0;
 }
 
 /**
@@ -2941,10 +3061,22 @@ handle_detailed_physical_size(struct detailed_monitor_section
     if (det_mon->type == DT &&
         det_mon->section.d_timings.h_size != 0 &&
         det_mon->section.d_timings.v_size != 0) {
-
-        p->output->mm_width = det_mon->section.d_timings.h_size;
-        p->output->mm_height = det_mon->section.d_timings.v_size;
-        p->ret = TRUE;
+        /* some sanity checking for aspect ratio:
+           assume any h / v (or v / h) > 2.4 to be bogus.
+           This would even include cinemascope */
+        if (((det_mon->section.d_timings.h_size * 5) <
+             (det_mon->section.d_timings.v_size * 12)) &&
+            ((det_mon->section.d_timings.v_size * 5) <
+             (det_mon->section.d_timings.h_size * 12))) {
+            p->output->mm_width = det_mon->section.d_timings.h_size;
+            p->output->mm_height = det_mon->section.d_timings.v_size;
+            p->ret = TRUE;
+        } else
+            xf86DrvMsg(p->output->scrn->scrnIndex, X_WARNING,
+                       "Output %s: Strange aspect ratio (%i/%i), "
+                       "consider adding a quirk\n", p->output->name,
+                       det_mon->section.d_timings.h_size,
+                       det_mon->section.d_timings.v_size);
     }
 }
 

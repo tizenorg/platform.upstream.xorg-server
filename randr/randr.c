@@ -60,7 +60,7 @@ DevPrivateKeyRec RRClientPrivateKeyRec;
 DevPrivateKeyRec rrPrivKeyRec;
 
 static void
-RRClientCallback(CallbackListPtr *list, pointer closure, pointer data)
+RRClientCallback(CallbackListPtr *list, void *closure, void *data)
 {
     NewClientInfoRec *clientinfo = (NewClientInfoRec *) data;
     ClientPtr pClient = clientinfo->client;
@@ -338,7 +338,7 @@ RRScreenInit(ScreenPtr pScreen)
 }
 
  /*ARGSUSED*/ static int
-RRFreeClient(pointer data, XID id)
+RRFreeClient(void *data, XID id)
 {
     RREventPtr pRREvent;
     WindowPtr pWin;
@@ -346,7 +346,7 @@ RRFreeClient(pointer data, XID id)
 
     pRREvent = (RREventPtr) data;
     pWin = pRREvent->window;
-    dixLookupResourceByType((pointer *) &pHead, pWin->drawable.id,
+    dixLookupResourceByType((void **) &pHead, pWin->drawable.id,
                             RREventType, serverClient, DixDestroyAccess);
     if (pHead) {
         pPrev = 0;
@@ -359,12 +359,12 @@ RRFreeClient(pointer data, XID id)
                 *pHead = pRREvent->next;
         }
     }
-    free((pointer) pRREvent);
+    free((void *) pRREvent);
     return 1;
 }
 
  /*ARGSUSED*/ static int
-RRFreeEvents(pointer data, XID id)
+RRFreeEvents(void *data, XID id)
 {
     RREventPtr *pHead, pCur, pNext;
 
@@ -372,9 +372,9 @@ RRFreeEvents(pointer data, XID id)
     for (pCur = *pHead; pCur; pCur = pNext) {
         pNext = pCur->next;
         FreeResource(pCur->clientResource, RRClientType);
-        free((pointer) pCur);
+        free((void *) pCur);
     }
-    free((pointer) pHead);
+    free((void *) pHead);
     return 1;
 }
 
@@ -420,17 +420,45 @@ RRExtensionInit(void)
 #endif
 }
 
+void
+RRResourcesChanged(ScreenPtr pScreen)
+{
+    rrScrPriv(pScreen);
+    pScrPriv->resourcesChanged = TRUE;
+
+    RRSetChanged(pScreen);
+}
+
+static void
+RRDeliverResourceEvent(ClientPtr client, WindowPtr pWin)
+{
+    ScreenPtr pScreen = pWin->drawable.pScreen;
+
+    rrScrPriv(pScreen);
+
+    xRRResourceChangeNotifyEvent re = {
+        .type = RRNotify + RREventBase,
+        .subCode = RRNotify_ResourceChange,
+        .timestamp = pScrPriv->lastSetTime.milliseconds,
+        .window = pWin->drawable.id
+    };
+
+    WriteEventsToClient(client, 1, (xEvent *) &re);
+}
+
 static int
-TellChanged(WindowPtr pWin, pointer value)
+TellChanged(WindowPtr pWin, void *value)
 {
     RREventPtr *pHead, pRREvent;
     ClientPtr client;
     ScreenPtr pScreen = pWin->drawable.pScreen;
+    ScreenPtr iter;
+    rrScrPrivPtr pSlaveScrPriv;
 
     rrScrPriv(pScreen);
     int i;
 
-    dixLookupResourceByType((pointer *) &pHead, pWin->drawable.id,
+    dixLookupResourceByType((void **) &pHead, pWin->drawable.id,
                             RREventType, serverClient, DixReadAccess);
     if (!pHead)
         return WT_WALKCHILDREN;
@@ -450,6 +478,16 @@ TellChanged(WindowPtr pWin, pointer value)
                 if (crtc->changed)
                     RRDeliverCrtcEvent(client, pWin, crtc);
             }
+
+            xorg_list_for_each_entry(iter, &pScreen->output_slave_list, output_head) {
+                pSlaveScrPriv = rrGetScrPriv(iter);
+                for (i = 0; i < pSlaveScrPriv->numCrtcs; i++) {
+                    RRCrtcPtr crtc = pSlaveScrPriv->crtcs[i];
+
+                    if (crtc->changed)
+                        RRDeliverCrtcEvent(client, pWin, crtc);
+                }
+            }
         }
 
         if (pRREvent->mask & RROutputChangeNotifyMask) {
@@ -459,9 +497,65 @@ TellChanged(WindowPtr pWin, pointer value)
                 if (output->changed)
                     RRDeliverOutputEvent(client, pWin, output);
             }
+
+            xorg_list_for_each_entry(iter, &pScreen->output_slave_list, output_head) {
+                pSlaveScrPriv = rrGetScrPriv(iter);
+                for (i = 0; i < pSlaveScrPriv->numOutputs; i++) {
+                    RROutputPtr output = pSlaveScrPriv->outputs[i];
+
+                    if (output->changed)
+                        RRDeliverOutputEvent(client, pWin, output);
+                }
+            }
+        }
+
+        if (pRREvent->mask & RRProviderChangeNotifyMask) {
+            xorg_list_for_each_entry(iter, &pScreen->output_slave_list, output_head) {
+                pSlaveScrPriv = rrGetScrPriv(iter);
+                if (pSlaveScrPriv->provider->changed)
+                    RRDeliverProviderEvent(client, pWin, pSlaveScrPriv->provider);
+            }
+            xorg_list_for_each_entry(iter, &pScreen->offload_slave_list, offload_head) {
+                pSlaveScrPriv = rrGetScrPriv(iter);
+                if (pSlaveScrPriv->provider->changed)
+                    RRDeliverProviderEvent(client, pWin, pSlaveScrPriv->provider);
+            }
+            xorg_list_for_each_entry(iter, &pScreen->unattached_list, unattached_head) {
+                pSlaveScrPriv = rrGetScrPriv(iter);
+                if (pSlaveScrPriv->provider->changed)
+                    RRDeliverProviderEvent(client, pWin, pSlaveScrPriv->provider);
+            }
+        }
+
+        if (pRREvent->mask & RRResourceChangeNotifyMask) {
+            if (pScrPriv->resourcesChanged) {
+                RRDeliverResourceEvent(client, pWin);
+            }
         }
     }
     return WT_WALKCHILDREN;
+}
+
+void
+RRSetChanged(ScreenPtr pScreen)
+{
+    /* set changed bits on the master screen only */
+    ScreenPtr master;
+    rrScrPriv(pScreen);
+    rrScrPrivPtr mastersp;
+
+    if (pScreen->isGPU) {
+        master = pScreen->current_master;
+        if (!master)
+            return;
+        mastersp = rrGetScrPriv(master);
+    }
+    else {
+        master = pScreen;
+        mastersp = pScrPriv;
+    }
+
+    mastersp->changed = TRUE;
 }
 
 /*
@@ -474,6 +568,8 @@ RRTellChanged(ScreenPtr pScreen)
     rrScrPriv(pScreen);
     rrScrPrivPtr mastersp;
     int i;
+    ScreenPtr iter;
+    rrScrPrivPtr pSlaveScrPriv;
 
     if (pScreen->isGPU) {
         master = pScreen->current_master;
@@ -484,7 +580,7 @@ RRTellChanged(ScreenPtr pScreen)
         mastersp = pScrPriv;
     }
 
-    if (pScrPriv->changed) {
+    if (mastersp->changed) {
         UpdateCurrentTimeIf();
         if (mastersp->configChanged) {
             mastersp->lastConfigTime = currentTime;
@@ -492,11 +588,33 @@ RRTellChanged(ScreenPtr pScreen)
         }
         pScrPriv->changed = FALSE;
         mastersp->changed = FALSE;
-        WalkTree(master, TellChanged, (pointer) master);
+
+        WalkTree(master, TellChanged, (void *) master);
+
+        mastersp->resourcesChanged = FALSE;
+
         for (i = 0; i < pScrPriv->numOutputs; i++)
             pScrPriv->outputs[i]->changed = FALSE;
         for (i = 0; i < pScrPriv->numCrtcs; i++)
             pScrPriv->crtcs[i]->changed = FALSE;
+
+        xorg_list_for_each_entry(iter, &master->output_slave_list, output_head) {
+            pSlaveScrPriv = rrGetScrPriv(iter);
+            pSlaveScrPriv->provider->changed = FALSE;
+            for (i = 0; i < pSlaveScrPriv->numOutputs; i++)
+                pSlaveScrPriv->outputs[i]->changed = FALSE;
+            for (i = 0; i < pSlaveScrPriv->numCrtcs; i++)
+                pSlaveScrPriv->crtcs[i]->changed = FALSE;
+        }
+        xorg_list_for_each_entry(iter, &master->offload_slave_list, offload_head) {
+            pSlaveScrPriv = rrGetScrPriv(iter);
+            pSlaveScrPriv->provider->changed = FALSE;
+        }
+        xorg_list_for_each_entry(iter, &master->unattached_list, unattached_head) {
+            pSlaveScrPriv = rrGetScrPriv(iter);
+            pSlaveScrPriv->provider->changed = FALSE;
+        }
+
         if (mastersp->layoutChanged) {
             pScrPriv->layoutChanged = FALSE;
             RRPointerScreenConfigured(master);

@@ -66,7 +66,6 @@
 #define WIN_JMP_ERROR_IO			2
 #define WIN_LOCAL_PROPERTY			"CYGX_CUT_BUFFER"
 #define WIN_XEVENTS_SUCCESS			0
-#define WIN_XEVENTS_SHUTDOWN			1
 #define WIN_XEVENTS_CONVERT			2
 #define WIN_XEVENTS_NOTIFY			3
 #define WIN_CLIPBOARD_RETRIES			40
@@ -79,7 +78,6 @@
  */
 
 extern char *display;
-extern void ErrorF(const char * /*f */ , ...);
 extern void winDebug(const char *format, ...);
 extern void winErrorFVerb(int verb, const char *format, ...);
 
@@ -100,16 +98,13 @@ void
  winClipboardDOStoUNIX(char *pszData, int iLength);
 
 void
- winClipboardUNIXtoDOS(unsigned char **ppszData, int iLength);
+ winClipboardUNIXtoDOS(char **ppszData, int iLength);
 
 /*
  * winclipboardthread.c
  */
 
 void *winClipboardProc(void *);
-
-void
- winDeinitClipboard(void);
 
 /*
  * winclipboardwndproc.c

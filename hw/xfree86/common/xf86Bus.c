@@ -117,27 +117,12 @@ xf86BusConfig(void)
     screenLayoutPtr layout;
     int i, j;
 
-    /* Enable full I/O access */
-    if (xorgHWAccess)
-        xorgHWAccess = xf86EnableIO();
-
     /*
      * Now call each of the Probe functions.  Each successful probe will
      * result in an extra entry added to the xf86Screens[] list for each
      * instance of the hardware found.
      */
     for (i = 0; i < xf86NumDrivers; i++) {
-        xorgHWFlags flags;
-
-        if (!xorgHWAccess) {
-            if (!xf86DriverList[i]->driverFunc
-                || !xf86DriverList[i]->driverFunc(NULL,
-                                                  GET_REQUIRED_HW_INTERFACES,
-                                                  &flags)
-                || NEED_IO_ENABLED(flags))
-                continue;
-        }
-
         xf86CallDriverProbe(xf86DriverList[i], FALSE);
     }
 
@@ -281,6 +266,11 @@ xf86IsEntityPrimary(int entityIndex)
 {
     EntityPtr pEnt = xf86Entities[entityIndex];
 
+#ifdef XSERVER_LIBPCIACCESS
+    if (primaryBus.type == BUS_PLATFORM && pEnt->bus.type == BUS_PCI)
+	return MATCH_PCI_DEVICES(pEnt->bus.id.pci, primaryBus.id.plat->pdev);
+#endif
+
     if (primaryBus.type != pEnt->bus.type)
         return FALSE;
 
@@ -298,7 +288,7 @@ xf86IsEntityPrimary(int entityIndex)
 
 Bool
 xf86SetEntityFuncs(int entityIndex, EntityProc init, EntityProc enter,
-                   EntityProc leave, pointer private)
+                   EntityProc leave, void *private)
 {
     if (entityIndex >= xf86NumEntities)
         return FALSE;

@@ -2,7 +2,7 @@
 %bcond_with x
 
 Name:           xorg-server
-Version:        1.13.3
+Version:        1.15.99.902
 Release:        1
 License:        MIT
 Summary:        X Server
@@ -103,7 +103,7 @@ cp %{SOURCE1001} .
 
 
 %build
-./autogen.sh
+NOCONFIGURE=1 ./autogen.sh
 %reconfigure \
 %if %{with mesa}
 %ifarch %ix86 x86_64
@@ -119,7 +119,6 @@ cp %{SOURCE1001} .
 	--disable-glx-tls \
 	--disable-vgahw \
 	--disable-vbe \
-	--disable-xaa \
 %endif
 %else
 	--disable-dri \
@@ -129,19 +128,16 @@ cp %{SOURCE1001} .
 	--disable-glx-tls \
 	--disable-vgahw \
 	--disable-vbe \
-	--disable-xaa \
 %endif
 	--enable-dga \
 	--disable-strict-compilation \
 	--disable-static \
 	--disable-unit-tests \
 	--disable-sparkle \
-	--disable-builddocs \
 	--disable-install-libxf86config \
 	--enable-registry \
 	--enable-gesture \
 	--enable-composite \
-	--enable-shm \
 	--enable-xres \
 	--enable-record \
 	--enable-xv \
@@ -154,16 +150,13 @@ cp %{SOURCE1001} .
 	--enable-xace \
 	--disable-xselinux \
 	--disable-xcsecurity \
-	--disable-xcalibrate \
 	--disable-tslib \
 	--disable-dbe \
 	--disable-xf86bigfont \
 	--enable-dpms \
-	--disable-config-dbus \
 	--enable-config-udev \
 	--disable-config-hal \
 	--enable-xfree86-utils \
-	--with-int10=x86emu \
 	--disable-windowswm \
 	--enable-libdrm \
 	--enable-xorg \
@@ -175,14 +168,14 @@ cp %{SOURCE1001} .
 	--disable-kdrive \
 	--disable-xephyr \
 	--disable-xfake \
+	--disable-dri3 \
+	--disable-present \
+	--disable-xwayland \
 	--disable-xfbdev \
 	--disable-kdrive-kbd \
 	--disable-kdrive-mouse \
 	--disable-kdrive-evdev \
-	--disable-doc \
-	--disable-devel-doc \
 	--without-dtrace \
-	--with-extra-module-dir="/usr/lib/xorg/extra-modules" \
 	--with-os-vendor="Tizen" \
 	--with-xkb-path="/usr/share/X11/xkb" \
 	--with-xkb-output="/var/lib/xkb/compiled" \
@@ -215,6 +208,7 @@ make %{?_smp_mflags}
 %make_install
 
 rm %{buildroot}/%{_datadir}/X11/xorg.conf.d/10-evdev.conf
+rm %{buildroot}/%{_datadir}/X11/xorg.conf.d/10-quirks.conf
 rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 
 %remove_docs

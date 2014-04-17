@@ -42,20 +42,14 @@
 #define YES					1
 #endif
 
+/* We can handle WM_MOUSEHWHEEL even though _WIN32_WINNT < 0x0600 */
+#ifndef WM_MOUSEHWHEEL
+#define WM_MOUSEHWHEEL 0x020E
+#endif
+
 /* Turn debug messages on or off */
 #ifndef CYGDEBUG
 #define CYGDEBUG				NO
-#endif
-
-/* WM_XBUTTON Messages. They should go into w32api. */
-#ifndef WM_XBUTTONDOWN
-#define WM_XBUTTONDOWN 523
-#endif
-#ifndef WM_XBUTTONUP
-#define WM_XBUTTONUP 524
-#endif
-#ifndef WM_XBUTTONDBLCLK
-#define WM_XBUTTONDBLCLK 525
 #endif
 
 #define WIN_DEFAULT_BPP				0
@@ -133,6 +127,8 @@
 
 #define WIN_MAX_KEYS_PER_KEY	4
 
+#define NONAMELESSUNION
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -169,7 +165,6 @@
 #include "micmap.h"
 #include "mifillarc.h"
 #include "mifpoly.h"
-#include "mibstore.h"
 #include "input.h"
 #include "mipointer.h"
 #include "X11/keysym.h"
@@ -248,9 +243,6 @@ static unsigned int PROFPT##point = 0;\
 if (++PROFPT##point % thresh == 0)\
 ErrorF (#point ": PROFILEPOINT hit %u times\n", PROFPT##point);\
 }
-
-/* We use xor this macro for detecting toggle key state changes */
-#define WIN_XOR(a,b) ((!(a) && (b)) || ((a) && !(b)))
 
 #define DEFINE_ATOM_HELPER(func,atom_name)			\
 static Atom func (void) {					\
@@ -462,6 +454,7 @@ typedef struct _winPrivScreenRec {
     Bool fBadDepth;
 
     int iDeltaZ;
+    int iDeltaV;
 
     int iConnectedClients;
 
@@ -616,7 +609,7 @@ typedef struct {
 #endif
 
 typedef struct {
-    pointer value;
+    void *value;
     XID id;
 } WindowIDPairRec, *WindowIDPairPtr;
 
@@ -758,7 +751,7 @@ Bool
  winAllocatePrivates(ScreenPtr pScreen);
 
 Bool
- winInitCmapPrivates(ColormapPtr pCmap, int index);
+ winInitCmapPrivates(ColormapPtr pCmap, int i);
 
 Bool
  winAllocateCmapPrivates(ColormapPtr pCmap);
@@ -780,7 +773,7 @@ void winSetAuthorization(void);
 void
 
 winBlockHandler(ScreenPtr pScreen,
-                pointer pTimeout, pointer pReadMask);
+                void *pTimeout, void *pReadMask);
 
 #ifdef XWIN_NATIVEGDI
 /*
@@ -858,11 +851,13 @@ void
 
 #ifdef DDXOSVERRORF
 void
- OSVenderVErrorF(const char *pszFormat, va_list va_args);
+OsVendorVErrorF(const char *pszFormat, va_list va_args)
+_X_ATTRIBUTE_PRINTF(1, 0);
 #endif
 
 void
- winMessageBoxF(const char *pszError, UINT uType, ...);
+winMessageBoxF(const char *pszError, UINT uType, ...)
+_X_ATTRIBUTE_PRINTF(1, 3);
 
 #ifdef XWIN_NATIVEGDI
 /*
@@ -921,8 +916,8 @@ void
  * winkeybd.c
  */
 
-void
- winTranslateKey(WPARAM wParam, LPARAM lParam, int *piScanCode);
+int
+ winTranslateKey(WPARAM wParam, LPARAM lParam);
 
 int
  winKeybdProc(DeviceIntPtr pDeviceInt, int iState);
@@ -986,7 +981,7 @@ int
  winMouseProc(DeviceIntPtr pDeviceInt, int iState);
 
 int
- winMouseWheel(ScreenPtr pScreen, int iDeltaZ);
+ winMouseWheel(int *iTotalDeltaZ, int iDeltaZ, int iButtonUp, int iButtonDown);
 
 void
  winMouseButtonsSendEvent(int iEventType, int iButton);
@@ -1040,7 +1035,7 @@ winModifyPixmapHeaderNativeGDI(PixmapPtr pPixmap,
                                int iWidth, int iHeight,
                                int iDepth,
                                int iBitsPerPixel,
-                               int devKind, pointer pPixData);
+                               int devKind, void *pPixData);
 #endif
 
 #ifdef XWIN_NATIVEGDI
@@ -1053,18 +1048,6 @@ void
 winPolyLineNativeGDI(DrawablePtr pDrawable,
                      GCPtr pGC, int mode, int npt, DDXPointPtr ppt);
 #endif
-
-#ifdef XWIN_NATIVEGDI
-/*
- * winpushpxl.c
- */
-
-void
-
-winPushPixels(GCPtr pGC, PixmapPtr pBitMap, DrawablePtr pDrawable,
-              int dx, int dy, int xOrg, int yOrg);
-#endif
-
 /*
  * winscrinit.c
  */
@@ -1073,12 +1056,12 @@ Bool
  winScreenInit(ScreenPtr pScreen, int argc, char **argv);
 
 Bool
- winFinishScreenInitFB(int index, ScreenPtr pScreen, int argc, char **argv);
+ winFinishScreenInitFB(int i, ScreenPtr pScreen, int argc, char **argv);
 
 #if defined(XWIN_NATIVEGDI)
 Bool
 
-winFinishScreenInitNativeGDI(int index,
+winFinishScreenInitNativeGDI(int i,
                              ScreenPtr pScreen, int argc, char **argv);
 #endif
 
@@ -1123,7 +1106,7 @@ Bool
 void
 
 winWakeupHandler(ScreenPtr pScreen,
-                 unsigned long ulResult, pointer pReadmask);
+                 unsigned long ulResult, void *pReadmask);
 
 /*
  * winwindow.c
@@ -1353,9 +1336,6 @@ void
  winMWExtWMMoveResizeXWindow(WindowPtr pWin, int x, int y, int w, int h);
 
 void
- winMWExtWMUpdateIcon(Window id);
-
-void
 
 winMWExtWMUpdateWindowDecoration(win32RootlessWindowPtr pRLWinPriv,
                                  winScreenInfoPtr pScreenInfo);
@@ -1413,6 +1393,12 @@ void
 winDoRandRScreenSetSize(ScreenPtr pScreen,
                         CARD16 width,
                         CARD16 height, CARD32 mmWidth, CARD32 mmHeight);
+
+/*
+ * winmsgwindow.c
+ */
+Bool
+winCreateMsgWindowThread(void);
 
 /*
  * END DDX and DIX Function Prototypes

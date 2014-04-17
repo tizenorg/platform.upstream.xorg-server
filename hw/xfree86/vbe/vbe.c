@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "xf86.h"
+#include "xf86Modes.h"
 #include "vbe.h"
 #include <X11/extensions/dpmsconst.h>
 
@@ -49,7 +50,7 @@ vbeInfoPtr
 VBEExtendedInit(xf86Int10InfoPtr pInt, int entityIndex, int Flags)
 {
     int RealOff;
-    pointer page = NULL;
+    void *page = NULL;
     ScrnInfoPtr pScrn = xf86FindScreenForEntity(entityIndex);
     vbeControllerInfoPtr vbe = NULL;
     Bool init_int10 = FALSE;
@@ -258,7 +259,7 @@ static unsigned char *
 vbeReadEDID(vbeInfoPtr pVbe)
 {
     int RealOff = pVbe->real_mode_base;
-    pointer page = pVbe->memory;
+    void *page = pVbe->memory;
     unsigned char *tmp = NULL;
     Bool novbe = FALSE;
     Bool noddc = FALSE;
@@ -318,10 +319,8 @@ vbeReadEDID(vbeInfoPtr pVbe)
 }
 
 xf86MonPtr
-vbeDoEDID(vbeInfoPtr pVbe, pointer pDDCModule)
+vbeDoEDID(vbeInfoPtr pVbe, void *unused)
 {
-    xf86MonPtr pMonitor;
-    pointer pModule;
     unsigned char *DDC_data = NULL;
 
     if (!pVbe)
@@ -329,23 +328,12 @@ vbeDoEDID(vbeInfoPtr pVbe, pointer pDDCModule)
     if (pVbe->version < 0x200)
         return NULL;
 
-    if (!(pModule = pDDCModule)) {
-        pModule =
-            xf86LoadSubModule(pVbe->pInt10->pScrn, "ddc");
-        if (!pModule)
-            return NULL;
-    }
-
     DDC_data = vbeReadEDID(pVbe);
 
     if (!DDC_data)
         return NULL;
 
-    pMonitor = xf86InterpretEDID(pVbe->pInt10->pScrn->scrnIndex, DDC_data);
-
-    if (!pDDCModule)
-        xf86UnloadSubModule(pModule);
-    return pMonitor;
+    return xf86InterpretEDID(pVbe->pInt10->pScrn->scrnIndex, DDC_data);
 }
 
 #define GET_UNALIGNED2(x) \
@@ -557,7 +545,7 @@ VBEFreeModeInfo(VbeModeInfoBlock * block)
 
 Bool
 VBESaveRestore(vbeInfoPtr pVbe, vbeSaveRestoreFunction function,
-               pointer *memory, int *size, int *real_mode_pages)
+               void **memory, int *size, int *real_mode_pages)
 {
     /*
        Input:
@@ -941,7 +929,7 @@ VBEVesaSaveRestore(vbeInfoPtr pVbe, vbeSaveRestorePtr vbe_sr,
             memcpy(vbe_sr->state, vbe_sr->pstate, vbe_sr->stateSize);
         ErrorF("VBESaveRestore\n");
         if ((VBESaveRestore(pVbe, function,
-                            (pointer) &vbe_sr->state,
+                            (void *) &vbe_sr->state,
                             &vbe_sr->stateSize, &vbe_sr->statePage))) {
             if (function == MODE_SAVE) {
                 SaveSucc = TRUE;
@@ -1067,7 +1055,7 @@ struct vbePanelID *
 VBEReadPanelID(vbeInfoPtr pVbe)
 {
     int RealOff = pVbe->real_mode_base;
-    pointer page = pVbe->memory;
+    void *page = pVbe->memory;
     void *tmp = NULL;
     int screen = pVbe->pInt10->pScrn->scrnIndex;
 

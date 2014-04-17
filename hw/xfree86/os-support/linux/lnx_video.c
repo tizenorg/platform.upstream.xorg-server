@@ -58,7 +58,8 @@ static Bool ExtendedEnabled = FALSE;
       !defined(__sparc__) && \
       !defined(__mips__) && \
       !defined(__nds32__) && \
-      !defined(__arm__)
+      !defined(__arm__) && \
+      !defined(__aarch64__)
 
 /*
  * Due to conflicts with "compiler.h", don't rely on <sys/io.h> to declare
@@ -79,17 +80,17 @@ extern int iopl(int __level);
 /* Video Memory Mapping section                                            */
 /***************************************************************************/
 
-static pointer mapVidMem(int, unsigned long, unsigned long, int);
-static void unmapVidMem(int, pointer, unsigned long);
+static void *mapVidMem(int, unsigned long, unsigned long, int);
+static void unmapVidMem(int, void *, unsigned long);
 
 #if defined (__alpha__)
 extern void sethae(unsigned long hae);
 extern unsigned long _bus_base __P((void)) __attribute__ ((const));
 extern unsigned long _bus_base_sparse __P((void)) __attribute__ ((const));
 
-static pointer mapVidMemSparse(int, unsigned long, unsigned long, int);
+static void *mapVidMemSparse(int, unsigned long, unsigned long, int);
 extern axpDevice lnxGetAXP(void);
-static void unmapVidMemSparse(int, pointer, unsigned long);
+static void unmapVidMemSparse(int, void *, unsigned long);
 static axpDevice axpSystem = -1;
 static Bool needSparse;
 static unsigned long hae_thresh;
@@ -101,8 +102,8 @@ static unsigned long bus_base;
 
 #define SPLIT_WC_REGIONS 1
 
-static pointer setWC(int, unsigned long, unsigned long, Bool, MessageType);
-static void undoWC(int, pointer);
+static void *setWC(int, unsigned long, unsigned long, Bool, MessageType);
+static void undoWC(int, void *);
 
 /* The file desc for /proc/mtrr. Once opened, left opened, and the mtrr
    driver will clean up when we exit. */
@@ -203,7 +204,7 @@ mtrr_cull_wc_region(int screenNum, unsigned long base, unsigned long size,
             xf86DrvMsgVerb(screenNum, X_WARNING, 0,
                            "Failed to remove MMIO "
                            "write-combining range (0x%lx,0x%lx)\n",
-                           gent.base, (unsigned long) gent.size);
+                           (unsigned long)gent.base, (unsigned long) gent.size);
         }
     }
     return wcreturn;
@@ -338,7 +339,7 @@ mtrr_undo_wc_region(int screenNum, struct mtrr_wc_region *wcr)
     }
 }
 
-static pointer
+static void *
 setWC(int screenNum, unsigned long base, unsigned long size, Bool enable,
       MessageType from)
 {
@@ -349,7 +350,7 @@ setWC(int screenNum, unsigned long base, unsigned long size, Bool enable,
 }
 
 static void
-undoWC(int screenNum, pointer regioninfo)
+undoWC(int screenNum, void *regioninfo)
 {
     mtrr_undo_wc_region(screenNum, regioninfo);
 }
@@ -395,16 +396,16 @@ xf86OSInitVidMem(VidMemInfoPtr pVidMem)
 /* Basically, you simply cannot do this on Sparc.  You have to do something portable
  * like use /dev/fb* or mmap() on /proc/bus/pci/X/Y nodes. -DaveM
  */
-static pointer
+static void *
 mapVidMem(int ScreenNum, unsigned long Base, unsigned long Size, int flags)
 {
     return NULL;
 }
 #else
-static pointer
+static void *
 mapVidMem(int ScreenNum, unsigned long Base, unsigned long Size, int flags)
 {
-    pointer base;
+    void *base;
     int fd;
     int mapflags = MAP_SHARED;
     int prot;
@@ -459,7 +460,7 @@ mapVidMem(int ScreenNum, unsigned long Base, unsigned long Size, int flags)
 #endif                          /* !(__sparc__) */
 
 static void
-unmapVidMem(int ScreenNum, pointer Base, unsigned long Size)
+unmapVidMem(int ScreenNum, void *Base, unsigned long Size)
 {
     uintptr_t alignOff = (uintptr_t) Base
         - ((uintptr_t) Base & ~(getpagesize() - 1));
@@ -479,45 +480,39 @@ volatile unsigned char *ioBase = NULL;
 #define __NR_pciconfig_iobase	200
 #endif
 
-#endif
-
-Bool
-xf86EnableIO(void)
+static Bool
+hwEnableIO(void)
 {
-#if defined(__powerpc__)
     int fd;
-    unsigned int ioBase_phys;
-#endif
-
-    if (ExtendedEnabled)
-        return TRUE;
-
-#if defined(__powerpc__)
-    ioBase_phys = syscall(__NR_pciconfig_iobase, 2, 0, 0);
+    unsigned int ioBase_phys = syscall(__NR_pciconfig_iobase, 2, 0, 0);
 
     fd = open("/dev/mem", O_RDWR);
     if (ioBase == NULL) {
         ioBase = (volatile unsigned char *) mmap(0, 0x20000,
                                                  PROT_READ | PROT_WRITE,
                                                  MAP_SHARED, fd, ioBase_phys);
-/* Should this be fatal or just a warning? */
-#if 0
-        if (ioBase == MAP_FAILED) {
-            xf86Msg(X_WARNING,
-                    "xf86EnableIOPorts: Failed to map iobase (%s)\n",
-                    strerror(errno));
-            return FALSE;
-        }
-#endif
     }
     close(fd);
-#elif !defined(__mc68000__) && !defined(__sparc__) && !defined(__mips__) && !defined(__sh__) && !defined(__hppa__) && !defined(__s390__) && !defined(__arm__) && !defined(__m32r__) && !defined(__nds32__)
+
+    return ioBase != MAP_FAILED;
+}
+
+static void
+hwDisableIO(void)
+{
+    munmap(ioBase, 0x20000);
+    ioBase = NULL;
+}
+
+#elif defined(__i386__) || defined(__x86_64__) || defined(__ia64__) || \
+      defined(__alpha__)
+
+static Bool
+hwEnableIO(void)
+{
     if (ioperm(0, 1024, 1) || iopl(3)) {
-        if (errno == ENODEV)
-            ErrorF("xf86EnableIOPorts: no I/O ports found\n");
-        else
-            FatalError("xf86EnableIOPorts: failed to set IOPL"
-                       " for I/O (%s)\n", strerror(errno));
+        ErrorF("xf86EnableIOPorts: failed to set IOPL for I/O (%s)\n",
+               strerror(errno));
         return FALSE;
     }
 #if !defined(__alpha__)
@@ -526,10 +521,33 @@ xf86EnableIO(void)
     ioperm(0x40, 4, 0);         /* trap access to the timer chip */
     ioperm(0x60, 4, 0);         /* trap access to the keyboard controller */
 #endif
-#endif
-    ExtendedEnabled = TRUE;
 
     return TRUE;
+}
+
+static void
+hwDisableIO(void)
+{
+    iopl(0);
+    ioperm(0, 1024, 0);
+}
+
+#else /* non-IO architectures */
+
+#define hwEnableIO() TRUE
+#define hwDisableIO() do {} while (0)
+
+#endif
+
+Bool
+xf86EnableIO(void)
+{
+    if (ExtendedEnabled)
+        return TRUE;
+
+    ExtendedEnabled = hwEnableIO();
+
+    return ExtendedEnabled;
 }
 
 void
@@ -537,60 +555,54 @@ xf86DisableIO(void)
 {
     if (!ExtendedEnabled)
         return;
-#if defined(__powerpc__)
-    munmap(ioBase, 0x20000);
-    ioBase = NULL;
-#elif !defined(__mc68000__) && !defined(__sparc__) && !defined(__mips__) && !defined(__sh__) && !defined(__hppa__) && !defined(__arm__) && !defined(__s390__) && !defined(__m32r__) && !defined(__nds32__)
-    iopl(0);
-    ioperm(0, 1024, 0);
-#endif
-    ExtendedEnabled = FALSE;
 
-    return;
+    hwDisableIO();
+
+    ExtendedEnabled = FALSE;
 }
 
 #if defined (__alpha__)
 
 #define vuip    volatile unsigned int *
 
-extern int readDense8(pointer Base, register unsigned long Offset);
-extern int readDense16(pointer Base, register unsigned long Offset);
-extern int readDense32(pointer Base, register unsigned long Offset);
+extern int readDense8(void *Base, register unsigned long Offset);
+extern int readDense16(void *Base, register unsigned long Offset);
+extern int readDense32(void *Base, register unsigned long Offset);
 extern void
- writeDenseNB8(int Value, pointer Base, register unsigned long Offset);
+ writeDenseNB8(int Value, void *Base, register unsigned long Offset);
 extern void
- writeDenseNB16(int Value, pointer Base, register unsigned long Offset);
+ writeDenseNB16(int Value, void *Base, register unsigned long Offset);
 extern void
- writeDenseNB32(int Value, pointer Base, register unsigned long Offset);
+ writeDenseNB32(int Value, void *Base, register unsigned long Offset);
 extern void
- writeDense8(int Value, pointer Base, register unsigned long Offset);
+ writeDense8(int Value, void *Base, register unsigned long Offset);
 extern void
- writeDense16(int Value, pointer Base, register unsigned long Offset);
+ writeDense16(int Value, void *Base, register unsigned long Offset);
 extern void
- writeDense32(int Value, pointer Base, register unsigned long Offset);
+ writeDense32(int Value, void *Base, register unsigned long Offset);
 
-static int readSparse8(pointer Base, register unsigned long Offset);
-static int readSparse16(pointer Base, register unsigned long Offset);
-static int readSparse32(pointer Base, register unsigned long Offset);
+static int readSparse8(void *Base, register unsigned long Offset);
+static int readSparse16(void *Base, register unsigned long Offset);
+static int readSparse32(void *Base, register unsigned long Offset);
 static void
- writeSparseNB8(int Value, pointer Base, register unsigned long Offset);
+ writeSparseNB8(int Value, void *Base, register unsigned long Offset);
 static void
- writeSparseNB16(int Value, pointer Base, register unsigned long Offset);
+ writeSparseNB16(int Value, void *Base, register unsigned long Offset);
 static void
- writeSparseNB32(int Value, pointer Base, register unsigned long Offset);
+ writeSparseNB32(int Value, void *Base, register unsigned long Offset);
 static void
- writeSparse8(int Value, pointer Base, register unsigned long Offset);
+ writeSparse8(int Value, void *Base, register unsigned long Offset);
 static void
- writeSparse16(int Value, pointer Base, register unsigned long Offset);
+ writeSparse16(int Value, void *Base, register unsigned long Offset);
 static void
- writeSparse32(int Value, pointer Base, register unsigned long Offset);
+ writeSparse32(int Value, void *Base, register unsigned long Offset);
 
 #define DENSE_BASE	0x2ff00000000UL
 #define SPARSE_BASE	0x30000000000UL
 
 static unsigned long msb_set = 0;
 
-static pointer
+static void *
 mapVidMemSparse(int ScreenNum, unsigned long Base, unsigned long Size,
                 int flags)
 {
@@ -677,11 +689,11 @@ mapVidMemSparse(int ScreenNum, unsigned long Base, unsigned long Size,
                 " to DENSE only at 0x%lx\n", Base, Size, ret);
 
 #endif
-    return (pointer) ret;
+    return (void *) ret;
 }
 
 static void
-unmapVidMemSparse(int ScreenNum, pointer Base, unsigned long Size)
+unmapVidMemSparse(int ScreenNum, void *Base, unsigned long Size)
 {
     unsigned long Offset = (unsigned long) Base - DENSE_BASE;
 
@@ -697,7 +709,7 @@ unmapVidMemSparse(int ScreenNum, pointer Base, unsigned long Size)
 }
 
 static int
-readSparse8(pointer Base, register unsigned long Offset)
+readSparse8(void *Base, register unsigned long Offset)
 {
     register unsigned long result, shift;
     register unsigned long msb;
@@ -721,7 +733,7 @@ readSparse8(pointer Base, register unsigned long Offset)
 }
 
 static int
-readSparse16(pointer Base, register unsigned long Offset)
+readSparse16(void *Base, register unsigned long Offset)
 {
     register unsigned long result, shift;
     register unsigned long msb;
@@ -745,7 +757,7 @@ readSparse16(pointer Base, register unsigned long Offset)
 }
 
 static int
-readSparse32(pointer Base, register unsigned long Offset)
+readSparse32(void *Base, register unsigned long Offset)
 {
     /* NOTE: this is really using DENSE. */
     mem_barrier();
@@ -753,7 +765,7 @@ readSparse32(pointer Base, register unsigned long Offset)
 }
 
 static void
-writeSparse8(int Value, pointer Base, register unsigned long Offset)
+writeSparse8(int Value, void *Base, register unsigned long Offset)
 {
     register unsigned long msb;
     register unsigned int b = Value & 0xffU;
@@ -774,7 +786,7 @@ writeSparse8(int Value, pointer Base, register unsigned long Offset)
 }
 
 static void
-writeSparse16(int Value, pointer Base, register unsigned long Offset)
+writeSparse16(int Value, void *Base, register unsigned long Offset)
 {
     register unsigned long msb;
     register unsigned int w = Value & 0xffffU;
@@ -795,7 +807,7 @@ writeSparse16(int Value, pointer Base, register unsigned long Offset)
 }
 
 static void
-writeSparse32(int Value, pointer Base, register unsigned long Offset)
+writeSparse32(int Value, void *Base, register unsigned long Offset)
 {
     /* NOTE: this is really using DENSE. */
     write_mem_barrier();
@@ -804,7 +816,7 @@ writeSparse32(int Value, pointer Base, register unsigned long Offset)
 }
 
 static void
-writeSparseNB8(int Value, pointer Base, register unsigned long Offset)
+writeSparseNB8(int Value, void *Base, register unsigned long Offset)
 {
     register unsigned long msb;
     register unsigned int b = Value & 0xffU;
@@ -822,7 +834,7 @@ writeSparseNB8(int Value, pointer Base, register unsigned long Offset)
 }
 
 static void
-writeSparseNB16(int Value, pointer Base, register unsigned long Offset)
+writeSparseNB16(int Value, void *Base, register unsigned long Offset)
 {
     register unsigned long msb;
     register unsigned int w = Value & 0xffffU;
@@ -840,30 +852,30 @@ writeSparseNB16(int Value, pointer Base, register unsigned long Offset)
 }
 
 static void
-writeSparseNB32(int Value, pointer Base, register unsigned long Offset)
+writeSparseNB32(int Value, void *Base, register unsigned long Offset)
 {
     /* NOTE: this is really using DENSE. */
     *(vuip) ((unsigned long) Base + (Offset)) = Value;
     return;
 }
 
-void (*xf86WriteMmio8) (int Value, pointer Base, unsigned long Offset)
+void (*xf86WriteMmio8) (int Value, void *Base, unsigned long Offset)
     = writeDense8;
-void (*xf86WriteMmio16) (int Value, pointer Base, unsigned long Offset)
+void (*xf86WriteMmio16) (int Value, void *Base, unsigned long Offset)
     = writeDense16;
-void (*xf86WriteMmio32) (int Value, pointer Base, unsigned long Offset)
+void (*xf86WriteMmio32) (int Value, void *Base, unsigned long Offset)
     = writeDense32;
-void (*xf86WriteMmioNB8) (int Value, pointer Base, unsigned long Offset)
+void (*xf86WriteMmioNB8) (int Value, void *Base, unsigned long Offset)
     = writeDenseNB8;
-void (*xf86WriteMmioNB16) (int Value, pointer Base, unsigned long Offset)
+void (*xf86WriteMmioNB16) (int Value, void *Base, unsigned long Offset)
     = writeDenseNB16;
-void (*xf86WriteMmioNB32) (int Value, pointer Base, unsigned long Offset)
+void (*xf86WriteMmioNB32) (int Value, void *Base, unsigned long Offset)
     = writeDenseNB32;
-int (*xf86ReadMmio8) (pointer Base, unsigned long Offset)
+int (*xf86ReadMmio8) (void *Base, unsigned long Offset)
     = readDense8;
-int (*xf86ReadMmio16) (pointer Base, unsigned long Offset)
+int (*xf86ReadMmio16) (void *Base, unsigned long Offset)
     = readDense16;
-int (*xf86ReadMmio32) (pointer Base, unsigned long Offset)
+int (*xf86ReadMmio32) (void *Base, unsigned long Offset)
     = readDense32;
 
 #endif                          /* __alpha__ */

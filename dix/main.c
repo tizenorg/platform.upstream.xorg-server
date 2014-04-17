@@ -125,14 +125,10 @@ BOOL serverRunning = FALSE;
 pthread_mutex_t serverRunningMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t serverRunningCond = PTHREAD_COND_INITIALIZER;
 
-int dix_main(int argc, char *argv[], char *envp[]);
+#endif
 
 int
 dix_main(int argc, char *argv[], char *envp[])
-#else
-int
-main(int argc, char *argv[], char *envp[])
-#endif
 {
     int i;
     HWEventQueueType alwaysCheckForInput[2];
@@ -172,12 +168,15 @@ main(int argc, char *argv[], char *envp[])
             serverClient = calloc(sizeof(ClientRec), 1);
             if (!serverClient)
                 FatalError("couldn't create server client");
-            InitClient(serverClient, 0, (pointer) NULL);
+            InitClient(serverClient, 0, (void *) NULL);
         }
         else
             ResetWellKnownSockets();
         clients[0] = serverClient;
         currentMaxClients = 1;
+
+        /* clear any existing selections */
+        InitSelections();
 
         /* Initialize privates before first allocation */
         dixResetPrivates();
@@ -196,7 +195,6 @@ main(int argc, char *argv[], char *envp[])
 
         InitAtoms();
         InitEvents();
-        InitSelections();
         InitGlyphCaching();
         dixResetRegistry();
         ResetFontPrivateIndex();
@@ -211,6 +209,9 @@ main(int argc, char *argv[], char *envp[])
             ScreenPtr pScreen = screenInfo.gpuscreens[i];
             if (!CreateScratchPixmapsForScreen(pScreen))
                 FatalError("failed to create scratch pixmaps");
+            if (pScreen->CreateScreenResources &&
+                !(*pScreen->CreateScreenResources) (pScreen))
+                FatalError("failed to create screen resources");
         }
 
         for (i = 0; i < screenInfo.numScreens; i++) {
@@ -355,9 +356,15 @@ main(int argc, char *argv[], char *envp[])
         dixFreePrivates(serverClient->devPrivates, PRIVATE_CLIENT);
         serverClient->devPrivates = NULL;
 
+	dixFreeRegistry();
+
         FreeFonts();
 
+        FreeAllAtoms();
+
         FreeAuditTimer();
+
+        DeleteCallbackManager();
 
         if (dispatchException & DE_TERMINATE) {
             CloseWellKnownConnections();

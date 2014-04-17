@@ -49,6 +49,7 @@
 #define WINDOW_TITLE_XDMCP	"%s:%s.%d"
 #define WIN_SCR_PROP		"cyg_screen_prop rl"
 #define WINDOW_CLASS_X		"cygwin/x X rl"
+#define WINDOW_CLASS_X_MSG      "cygwin/x X msg"
 #define WINDOW_TITLE_X		PROJECT_NAME " X"
 #define WIN_WINDOW_PROP		"cyg_window_prop_rl"
 #ifdef HAS_DEVWINDOWS
@@ -81,15 +82,6 @@ typedef struct {
 #ifdef XWIN_GLX_WINDOWS
     Bool fWglUsed;
 #endif
-
-    /* Privates used by primary fb DirectDraw server */
-    LPDDSURFACEDESC pddsdPrimary;
-
-    /* Privates used by shadow fb DirectDraw Nonlocking server */
-    LPDIRECTDRAWSURFACE4 pddsPrimary4;
-
-    /* Privates used by both shadow fb DirectDraw servers */
-    LPDIRECTDRAWCLIPPER pddcPrimary;
 } winPrivWinRec, *winPrivWinPtr;
 
 #ifdef XWIN_MULTIWINDOW
@@ -119,6 +111,7 @@ typedef struct _winWMMessageRec {
 #define		WM_WM_CHANGE_STATE	(WM_USER + 11)
 #define		WM_WM_MAP2		(WM_USER + 12)
 #define		WM_WM_MAP3		(WM_USER + 13)
+#define		WM_WM_HINTS_EVENT	(WM_USER + 14)
 #define		WM_MANAGE		(WM_USER + 100)
 #define		WM_UNMANAGE		(WM_USER + 102)
 
@@ -156,6 +149,18 @@ void
 
 void
  winMinimizeWindow(Window id);
+
+void
+ winPropertyStoreInit(void);
+
+void
+ winPropertyStoreDestroy(void);
+
+void
+ winSetAppUserModelID(HWND hWnd, const char *AppID);
+
+void
+ winShowWindowOnTaskbar(HWND hWnd, BOOL show);
 
 #endif                          /* XWIN_MULTIWINDOW */
 #endif

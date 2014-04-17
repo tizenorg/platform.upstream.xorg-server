@@ -48,10 +48,6 @@
 #include "glxutil.h"
 #include "glxdricommon.h"
 
-#include "glapitable.h"
-#include "glapi.h"
-#include "glthread.h"
-#include "dispatch.h"
 #include "extension_string.h"
 
 /* RTLD_LOCAL is not defined on Cygwin */
@@ -174,8 +170,6 @@ __glXDRIcontextCopy(__GLXcontext * baseDst, __GLXcontext * baseSrc,
                                          src->driContext, mask);
 }
 
-#ifdef __DRI_TEX_BUFFER
-
 static int
 __glXDRIbindTexImage(__GLXcontext * baseContext,
                      int buffer, __GLXdrawable * glxPixmap)
@@ -208,24 +202,6 @@ __glXDRIreleaseTexImage(__GLXcontext * baseContext,
     /* FIXME: Just unbind the texture? */
     return Success;
 }
-
-#else
-
-static int
-__glXDRIbindTexImage(__GLXcontext * baseContext,
-                     int buffer, __GLXdrawable * glxPixmap)
-{
-    return Success;
-}
-
-static int
-__glXDRIreleaseTexImage(__GLXcontext * baseContext,
-                        int buffer, __GLXdrawable * pixmap)
-{
-    return Success;
-}
-
-#endif
 
 static __GLXtextureFromPixmap __glXDRItextureFromPixmap = {
     __glXDRIbindTexImage,
@@ -390,7 +366,7 @@ swrastGetImage(__DRIdrawable * draw,
 }
 
 static const __DRIswrastLoaderExtension swrastLoaderExtension = {
-    {__DRI_SWRAST_LOADER, __DRI_SWRAST_LOADER_VERSION},
+    {__DRI_SWRAST_LOADER, 1},
     swrastGetDrawableInfo,
     swrastPutImage,
     swrastGetImage
@@ -411,23 +387,23 @@ initializeExtensions(__GLXDRIscreen * screen)
     extensions = screen->core->getExtensions(screen->driScreen);
 
     for (i = 0; extensions[i]; i++) {
-#ifdef __DRI_COPY_SUB_BUFFER
         if (strcmp(extensions[i]->name, __DRI_COPY_SUB_BUFFER) == 0) {
             screen->copySubBuffer =
                 (const __DRIcopySubBufferExtension *) extensions[i];
             /* GLX_MESA_copy_sub_buffer is always enabled. */
         }
-#endif
 
-#ifdef __DRI_TEX_BUFFER
         if (strcmp(extensions[i]->name, __DRI_TEX_BUFFER) == 0) {
             screen->texBuffer = (const __DRItexBufferExtension *) extensions[i];
             /* GLX_EXT_texture_from_pixmap is always enabled. */
         }
-#endif
+
         /* Ignore unknown extensions */
     }
 }
+
+/* white lie */
+extern glx_func_ptr glXGetProcAddressARB(const char *);
 
 static __GLXscreen *
 __glXDRIscreenProbe(ScreenPtr pScreen)
@@ -447,9 +423,9 @@ __glXDRIscreenProbe(ScreenPtr pScreen)
 
     screen->driver = glxProbeDriver(driverName,
                                     (void **) &screen->core,
-                                    __DRI_CORE, __DRI_CORE_VERSION,
+                                    __DRI_CORE, 1,
                                     (void **) &screen->swrast,
-                                    __DRI_SWRAST, __DRI_SWRAST_VERSION);
+                                    __DRI_SWRAST, 1);
     if (screen->driver == NULL) {
         goto handle_error;
     }
@@ -475,6 +451,8 @@ __glXDRIscreenProbe(ScreenPtr pScreen)
 
     screen->base.GLXmajor = 1;
     screen->base.GLXminor = 4;
+
+    __glXsetGetProcAddress(glXGetProcAddressARB);
 
     LogMessage(X_INFO, "AIGLX: Loaded and initialized %s\n", driverName);
 

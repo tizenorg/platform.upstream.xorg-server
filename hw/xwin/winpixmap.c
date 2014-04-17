@@ -109,7 +109,7 @@ winCreatePixmapNativeGDI(ScreenPtr pScreen,
     /* Create a DIB for the pixmap */
     pPixmapPriv->hBitmap = winCreateDIBNativeGDI(iWidth, iHeight, iDepth,
                                                  &pPixmapPriv->pbBits,
-                                                 (BITMAPINFO **) & pPixmapPriv->
+                                                 (BITMAPINFO **) &pPixmapPriv->
                                                  pbmih);
 
 #if CYGDEBUG
@@ -178,7 +178,7 @@ Bool
 winModifyPixmapHeaderNativeGDI(PixmapPtr pPixmap,
                                int iWidth, int iHeight,
                                int iDepth,
-                               int iBitsPerPixel, int devKind, pointer pPixData)
+                               int iBitsPerPixel, int devKind, void *pPixData)
 {
     FatalError("winModifyPixmapHeaderNativeGDI ()\n");
     return TRUE;

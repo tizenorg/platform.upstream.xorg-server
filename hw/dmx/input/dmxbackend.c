@@ -101,7 +101,7 @@ typedef struct _myPrivate {
 #endif
 
 /** Create and return a private data structure. */
-pointer
+void *
 dmxBackendCreatePrivate(DeviceIntPtr pDevice)
 {
     GETDMXLOCALFROMPDEVICE;
@@ -115,7 +115,7 @@ dmxBackendCreatePrivate(DeviceIntPtr pDevice)
  * verify that the structure was actually created by
  * #dmxBackendCreatePrivate. */
 void
-dmxBackendDestroyPrivate(pointer private)
+dmxBackendDestroyPrivate(void *private)
 {
     free(private);
 }
@@ -262,7 +262,7 @@ dmxBackendOffscreen(int screen, int x, int y)
 /** This routine is called from #dmxCoreMotion for each motion
  * event. \a x and \a y are global coordinants. */
 void
-dmxBackendUpdatePosition(pointer private, int x, int y)
+dmxBackendUpdatePosition(void *private, int x, int y)
 {
     GETPRIVFROMPRIVATE;
     int screen = miPointerGetScreen(inputInfo.pointer)->myNum;
@@ -419,10 +419,9 @@ dmxBackendCollectEvents(DevicePtr pDev,
             }
             break;
         case MotionNotify:
-            DMXDBG9("dmxBackendCollectEvents: MotionNotify %d/%d (mi %d)"
+            DMXDBG8("dmxBackendCollectEvents: MotionNotify %d/%d"
                     " newscreen=%d: %d %d (e=%d; last=%d,%d)\n",
                     dmxScreen->index, priv->myScreen,
-                    miPointerCurrentScreen()->myNum,
                     priv->newscreen,
                     X.xmotion.x, X.xmotion.y,
                     entered, priv->lastX, priv->lastY);
@@ -501,7 +500,7 @@ dmxBackendCollectEvents(DevicePtr pDev,
  * event processing actually takes place here, but this is a convenient
  * place to update the pointer. */
 void
-dmxBackendProcessInput(pointer private)
+dmxBackendProcessInput(void *private)
 {
     GETPRIVFROMPRIVATE;
 
@@ -579,9 +578,6 @@ dmxBackendLateReInit(DevicePtr pDev)
     GETPRIVFROMPDEV;
     int x, y;
 
-    DMXDBG1("dmxBackendLateReInit miPointerCurrentScreen() = %p\n",
-            miPointerCurrentScreen());
-
     dmxBackendSameDisplay(NULL, 0);     /* Invalidate cache */
     dmxBackendInitPrivate(pDev);
     dmxBackendComputeCenter(priv);
@@ -654,7 +650,7 @@ dmxBackendKbdGetInfo(DevicePtr pDev, DMXLocalInitInfoPtr info)
 /** Process #DMXFunctionType functions.  The only function handled here
  * is to acknowledge a pending server shutdown. */
 int
-dmxBackendFunctions(pointer private, DMXFunctionType function)
+dmxBackendFunctions(void *private, DMXFunctionType function)
 {
     switch (function) {
     case DMX_FUNCTION_TERMINATE:

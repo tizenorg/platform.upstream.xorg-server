@@ -1354,7 +1354,7 @@ scanLineWidth(unsigned int xsize,       /* pixels */
 
 int
 xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
-                  char **modeNames, ClockRangePtr clockRanges,
+                  const char **modeNames, ClockRangePtr clockRanges,
                   int *linePitches, int minPitch, int maxPitch, int pitchInc,
                   int minHeight, int maxHeight, int virtualX, int virtualY,
                   int apertureSize, LookupModeFlags strategy)
@@ -1370,7 +1370,6 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
     int saveType;
     PixmapFormatRec *BankFormat;
     ClockRangePtr cp;
-    ClockRangePtr storeClockRanges;
     int numTimings = 0;
     range hsync[MAX_HSYNC];
     range vrefresh[MAX_VREFRESH];
@@ -1492,16 +1491,14 @@ xf86ValidateModes(ScrnInfoPtr scrp, DisplayModePtr availModes,
     /*
      * Store the clockRanges for later use by the VidMode extension.
      */
-    storeClockRanges = scrp->clockRanges;
-    while (storeClockRanges != NULL) {
-        storeClockRanges = storeClockRanges->next;
-    }
-    for (cp = clockRanges; cp != NULL; cp = cp->next,
-         storeClockRanges = storeClockRanges->next) {
-        storeClockRanges = xnfalloc(sizeof(ClockRange));
+    nt_list_for_each_entry(cp, clockRanges, next) {
+        ClockRangePtr newCR = xnfalloc(sizeof(ClockRange));
+        memcpy(newCR, cp, sizeof(ClockRange));
+        newCR->next = NULL;
         if (scrp->clockRanges == NULL)
-            scrp->clockRanges = storeClockRanges;
-        memcpy(storeClockRanges, cp, sizeof(ClockRange));
+            scrp->clockRanges = newCR;
+        else
+            nt_list_append(newCR, scrp->clockRanges, ClockRange, next);
     }
 
     /* Determine which pixmap format to pass to scanLineWidth() */
@@ -2001,7 +1998,7 @@ xf86DeleteMode(DisplayModePtr * modeList, DisplayModePtr mode)
             mode->next->prev = mode->prev;
     }
 
-    free(mode->name);
+    free((void *) mode->name);
     free(mode);
 }
 

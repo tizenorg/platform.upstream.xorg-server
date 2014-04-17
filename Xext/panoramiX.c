@@ -53,9 +53,8 @@ Equipment Corporation.
 #include "servermd.h"
 #include "resource.h"
 #include "picturestr.h"
-#ifdef XFIXES
 #include "xfixesint.h"
-#endif
+#include "damageextint.h"
 #ifdef COMPOSITE
 #include "compint.h"
 #endif
@@ -75,7 +74,7 @@ int PanoramiXPixWidth = 0;
 int PanoramiXPixHeight = 0;
 int PanoramiXNumScreens = 0;
 
-static RegionRec PanoramiXScreenRegion = { {0, 0, 0, 0}, NULL };
+_X_EXPORT RegionRec PanoramiXScreenRegion = { {0, 0, 0, 0}, NULL };
 
 static int PanoramiXNumDepths;
 static DepthPtr PanoramiXDepths;
@@ -119,7 +118,7 @@ static DevPrivateKeyRec PanoramiXScreenKeyRec;
 typedef struct {
     DDXPointRec clipOrg;
     DDXPointRec patOrg;
-    GCFuncs *wrapFuncs;
+    const GCFuncs *wrapFuncs;
 } PanoramiXGCRec, *PanoramiXGCPtr;
 
 typedef struct {
@@ -131,11 +130,11 @@ static void XineramaValidateGC(GCPtr, unsigned long, DrawablePtr);
 static void XineramaChangeGC(GCPtr, unsigned long);
 static void XineramaCopyGC(GCPtr, unsigned long, GCPtr);
 static void XineramaDestroyGC(GCPtr);
-static void XineramaChangeClip(GCPtr, int, pointer, int);
+static void XineramaChangeClip(GCPtr, int, void *, int);
 static void XineramaDestroyClip(GCPtr);
 static void XineramaCopyClip(GCPtr, GCPtr);
 
-static GCFuncs XineramaGCFuncs = {
+static const GCFuncs XineramaGCFuncs = {
     XineramaValidateGC, XineramaChangeGC, XineramaCopyGC, XineramaDestroyGC,
     XineramaChangeClip, XineramaDestroyClip, XineramaCopyClip
 };
@@ -161,7 +160,7 @@ XineramaCloseScreen(ScreenPtr pScreen)
     if (pScreen->myNum == 0)
         RegionUninit(&PanoramiXScreenRegion);
 
-    free((pointer) pScreenPriv);
+    free(pScreenPriv);
 
     return (*pScreen->CloseScreen) (pScreen);
 }
@@ -295,7 +294,7 @@ XineramaCopyGC(GCPtr pGCSrc, unsigned long mask, GCPtr pGCDst)
 }
 
 static void
-XineramaChangeClip(GCPtr pGC, int type, pointer pvalue, int nrects)
+XineramaChangeClip(GCPtr pGC, int type, void *pvalue, int nrects)
 {
     Xinerama_GC_FUNC_PROLOGUE(pGC);
     (*pGC->funcs->ChangeClip) (pGC, type, pvalue, nrects);
@@ -319,7 +318,7 @@ XineramaDestroyClip(GCPtr pGC)
 }
 
 int
-XineramaDeleteResource(pointer data, XID id)
+XineramaDeleteResource(void *data, XID id)
 {
     free(data);
     return 1;
@@ -331,7 +330,7 @@ typedef struct {
 } PanoramiXSearchData;
 
 static Bool
-XineramaFindIDByScrnum(pointer resource, XID id, pointer privdata)
+XineramaFindIDByScrnum(void *resource, XID id, void *privdata)
 {
     PanoramiXRes *res = (PanoramiXRes *) resource;
     PanoramiXSearchData *data = (PanoramiXSearchData *) privdata;
@@ -343,7 +342,7 @@ PanoramiXRes *
 PanoramiXFindIDByScrnum(RESTYPE type, XID id, int screen)
 {
     PanoramiXSearchData data;
-    pointer val;
+    void *val;
 
     if (!screen) {
         dixLookupResourceByType(&val, id, type, serverClient, DixReadAccess);
@@ -583,22 +582,19 @@ PanoramiXExtensionInit(void)
     ProcVector[X_StoreNamedColor] = PanoramiXStoreNamedColor;
 
     PanoramiXRenderInit();
-#ifdef XFIXES
     PanoramiXFixesInit();
-#endif
+    PanoramiXDamageInit();
 #ifdef COMPOSITE
     PanoramiXCompositeInit();
 #endif
 
 }
 
-extern Bool CreateConnectionBlock(void);
-
 Bool
 PanoramiXCreateConnectionBlock(void)
 {
     int i, j, length;
-    Bool disableBackingStore = FALSE;
+    Bool disable_backing_store = FALSE;
     int old_width, old_height;
     float width_mult, height_mult;
     xWindowRoot *root;
@@ -624,10 +620,10 @@ PanoramiXCreateConnectionBlock(void)
         }
         if (pScreen->backingStoreSupport !=
             screenInfo.screens[0]->backingStoreSupport)
-            disableBackingStore = TRUE;
+            disable_backing_store = TRUE;
     }
 
-    if (disableBackingStore) {
+    if (disable_backing_store) {
         for (i = 0; i < screenInfo.numScreens; i++) {
             pScreen = screenInfo.screens[i];
             pScreen->backingStoreSupport = NotUseful;
@@ -695,9 +691,9 @@ PanoramiXCreateConnectionBlock(void)
     root->mmHeight *= height_mult;
 
     while (ConnectionCallbackList) {
-        pointer tmp;
+        void *tmp;
 
-        tmp = (pointer) ConnectionCallbackList;
+        tmp = (void *) ConnectionCallbackList;
         (*ConnectionCallbackList->func) ();
         ConnectionCallbackList = ConnectionCallbackList->next;
         free(tmp);
@@ -833,15 +829,15 @@ PanoramiXConsolidate(void)
     saver->type = XRT_WINDOW;
 
     FOR_NSCREENS(i) {
-        ScreenPtr pScreen = screenInfo.screens[i];
+        ScreenPtr scr = screenInfo.screens[i];
 
-        root->info[i].id = pScreen->root->drawable.id;
+        root->info[i].id = scr->root->drawable.id;
         root->u.win.class = InputOutput;
         root->u.win.root = TRUE;
-        saver->info[i].id = pScreen->screensaver.wid;
+        saver->info[i].id = scr->screensaver.wid;
         saver->u.win.class = InputOutput;
         saver->u.win.root = TRUE;
-        defmap->info[i].id = pScreen->defColormap;
+        defmap->info[i].id = scr->defColormap;
     }
 
     AddResource(root->info[0].id, XRT_WINDOW, root);
@@ -892,9 +888,8 @@ PanoramiXResetProc(ExtensionEntry * extEntry)
     int i;
 
     PanoramiXRenderReset();
-#ifdef XFIXES
     PanoramiXFixesReset();
-#endif
+    PanoramiXDamageReset();
 #ifdef COMPOSITE
     PanoramiXCompositeReset ();
 #endif

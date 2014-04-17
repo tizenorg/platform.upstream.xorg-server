@@ -1,4 +1,6 @@
 AUTOMAKE_OPTIONS=nostdinc
+
+# Required for automake < 1.14
 ACLOCAL_AMFLAGS = -I m4
 
 if COMPOSITE
@@ -21,6 +23,22 @@ if GESTURE
 GESTURE_DIR=gesture
 endif
 
+if DRI3
+DRI3_DIR=dri3
+endif
+
+if PRESENT
+PRESENT_DIR=present
+endif
+
+if PSEUDORAMIX
+PSEUDORAMIX_DIR=pseudoramiX
+endif
+
+if GLAMOR
+GLAMOR_DIR=glamor
+endif
+
 SUBDIRS = \
 	doc \
 	man \
@@ -35,13 +53,17 @@ SUBDIRS = \
 	render  \
 	Xi \
 	xkb \
+	$(PSEUDORAMIX_DIR) \
 	$(DBE_DIR) \
 	$(RECORD_DIR) \
 	xfixes \
 	damageext \
 	$(COMPOSITE_DIR) \
 	$(GLX_DIR) \
+	$(PRESENT_DIR) \
+	$(DRI3_DIR) \
 	exa \
+	$(GLAMOR_DIR) \
 	config \
 	$(GESTURE_DIR) \
 	hw \
@@ -82,6 +104,7 @@ DIST_SUBDIRS = \
 	Xext \
 	miext \
 	os \
+	pseudoramiX \
 	randr \
 	render  \
 	Xi \
@@ -93,7 +116,10 @@ DIST_SUBDIRS = \
 	composite \
 	glx \
 	exa \
+	glamor \
 	config \
+	dri3 \
+	present \
 	hw \
 	test
 

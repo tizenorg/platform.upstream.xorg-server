@@ -179,7 +179,7 @@ UngrabAllDevices(Bool kill_client)
             continue;
         PrintDeviceGrabInfo(dev);
         client = clients[CLIENT_ID(dev->deviceGrab.grab->resource)];
-        if (!client || client->clientGone)
+        if (!kill_client || !client || client->clientGone)
             dev->deviceGrab.DeactivateGrab(dev);
         if (kill_client)
             CloseDownClient(client);
@@ -189,13 +189,18 @@ UngrabAllDevices(Bool kill_client)
 }
 
 GrabPtr
-AllocGrab(void)
+AllocGrab(const GrabPtr src)
 {
     GrabPtr grab = calloc(1, sizeof(GrabRec));
 
     if (grab) {
         grab->xi2mask = xi2mask_new();
         if (!grab->xi2mask) {
+            free(grab);
+            grab = NULL;
+        }
+        else if (src && !CopyGrab(grab, src)) {
+            free(grab->xi2mask);
             free(grab);
             grab = NULL;
         }
@@ -213,7 +218,7 @@ CreateGrab(int client, DeviceIntPtr device, DeviceIntPtr modDevice,
 {
     GrabPtr grab;
 
-    grab = AllocGrab();
+    grab = AllocGrab(NULL);
     if (!grab)
         return (GrabPtr) NULL;
     grab->resource = FakeClientID(client);
@@ -235,13 +240,11 @@ CreateGrab(int client, DeviceIntPtr device, DeviceIntPtr modDevice,
     grab->detail.exact = keybut;
     grab->detail.pMask = NULL;
     grab->confineTo = confineTo;
-    grab->cursor = cursor;
+    grab->cursor = RefCursor(cursor);
     grab->next = NULL;
 
     if (grabtype == XI2)
         xi2mask_merge(grab->xi2mask, mask->xi2mask);
-    if (cursor)
-        cursor->refcnt++;
     return grab;
 
 }
@@ -249,8 +252,7 @@ CreateGrab(int client, DeviceIntPtr device, DeviceIntPtr modDevice,
 void
 FreeGrab(GrabPtr pGrab)
 {
-    if (pGrab->grabtype == XI2 && pGrab->type == XI_TouchBegin)
-        TouchListenerGone(pGrab->resource);
+    BUG_RETURN(!pGrab);
 
     free(pGrab->modifiersDetail.pMask);
     free(pGrab->detail.pMask);
@@ -268,9 +270,6 @@ CopyGrab(GrabPtr dst, const GrabPtr src)
     Mask *mdetails_mask = NULL;
     Mask *details_mask = NULL;
     XI2Mask *xi2mask;
-
-    if (src->cursor)
-        src->cursor->refcnt++;
 
     if (src->modifiersDetail.pMask) {
         int len = MasksPerDetailMask * sizeof(Mask);
@@ -309,6 +308,7 @@ CopyGrab(GrabPtr dst, const GrabPtr src)
     dst->modifiersDetail.pMask = mdetails_mask;
     dst->detail.pMask = details_mask;
     dst->xi2mask = xi2mask;
+    dst->cursor = RefCursor(src->cursor);
 
     xi2mask_merge(dst->xi2mask, src->xi2mask);
 
@@ -316,7 +316,7 @@ CopyGrab(GrabPtr dst, const GrabPtr src)
 }
 
 int
-DeletePassiveGrab(pointer value, XID id)
+DeletePassiveGrab(void *value, XID id)
 {
     GrabPtr g, prev;
     GrabPtr pGrab = (GrabPtr) value;
@@ -563,7 +563,7 @@ AddPassiveGrabToList(ClientPtr client, GrabPtr pGrab)
 
     pGrab->next = pGrab->window->optional->passiveGrabs;
     pGrab->window->optional->passiveGrabs = pGrab;
-    if (AddResource(pGrab->resource, RT_PASSIVEGRAB, (pointer) pGrab))
+    if (AddResource(pGrab->resource, RT_PASSIVEGRAB, (void *) pGrab))
         return Success;
     return BadAlloc;
 }
@@ -661,7 +661,7 @@ DeletePassiveGrabFromList(GrabPtr pMinuendGrab)
                 ok = FALSE;
             }
             else if (!AddResource(pNewGrab->resource, RT_PASSIVEGRAB,
-                                  (pointer) pNewGrab))
+                                  (void *) pNewGrab))
                 ok = FALSE;
             else
                 adds[nadds++] = pNewGrab;

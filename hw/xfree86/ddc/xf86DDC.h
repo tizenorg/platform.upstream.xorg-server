@@ -45,8 +45,6 @@ extern _X_EXPORT void
 
 extern _X_EXPORT Bool xf86SetDDCproperties(ScrnInfoPtr pScreen, xf86MonPtr DDC);
 
-extern _X_EXPORT DisplayModePtr xf86DDCGetModes(int scrnIndex, xf86MonPtr DDC);
-
 extern _X_EXPORT Bool
  xf86MonitorIsHDMI(xf86MonPtr mon);
 
@@ -99,5 +97,7 @@ void xf86DetTimingApplyQuirks(struct detailed_monitor_section *det_mon,
 typedef void (*handle_video_fn) (struct cea_video_block *, void *);
 
 void xf86ForEachVideoBlock(xf86MonPtr, handle_video_fn, void *);
+
+struct cea_data_block *xf86MonitorFindHDMIBlock(xf86MonPtr mon);
 
 #endif

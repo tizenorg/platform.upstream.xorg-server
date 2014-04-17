@@ -141,10 +141,6 @@ dmxPictureInit(ScreenPtr pScreen, PictFormatPtr formats, int nformats)
     DMXScreenInfo *dmxScreen = &dmxScreens[pScreen->myNum];
     PictureScreenPtr ps;
 
-    /* The shadow framebuffer only relies on FB to be initialized */
-    if (dmxShadowFB)
-        return fbPictureInit(pScreen, formats, nformats);
-
     if (!miPictureInit(pScreen, formats, nformats))
         return FALSE;
 
@@ -289,7 +285,7 @@ dmxProcRenderCreateGlyphSet(ClientPtr client)
         /* Store glyphsets from backends in glyphSet->devPrivate ????? */
         /* Make sure we handle all errors here!! */
 
-        dixLookupResourceByType((pointer *) &glyphSet,
+        dixLookupResourceByType((void **) &glyphSet,
                                 stuff->gsid, GlyphSetType,
                                 client, DixDestroyAccess);
 
@@ -336,7 +332,7 @@ dmxProcRenderFreeGlyphSet(ClientPtr client)
     REQUEST(xRenderFreeGlyphSetReq);
 
     REQUEST_SIZE_MATCH(xRenderFreeGlyphSetReq);
-    dixLookupResourceByType((pointer *) &glyphSet,
+    dixLookupResourceByType((void **) &glyphSet,
                             stuff->glyphset, GlyphSetType,
                             client, DixDestroyAccess);
 
@@ -382,7 +378,7 @@ dmxProcRenderAddGlyphs(ClientPtr client)
         CARD8 *bits;
         int nbytes;
 
-        dixLookupResourceByType((pointer *) &glyphSet,
+        dixLookupResourceByType((void **) &glyphSet,
                                 stuff->glyphset, GlyphSetType,
                                 client, DixReadAccess);
         glyphPriv = DMX_GET_GLYPH_PRIV(glyphSet);
@@ -427,7 +423,7 @@ dmxProcRenderFreeGlyphs(ClientPtr client)
     REQUEST(xRenderFreeGlyphsReq);
 
     REQUEST_AT_LEAST_SIZE(xRenderFreeGlyphsReq);
-    dixLookupResourceByType((pointer *) &glyphSet,
+    dixLookupResourceByType((void **) &glyphSet,
                             stuff->glyphset, GlyphSetType,
                             client, DixWriteAccess);
 
@@ -502,14 +498,14 @@ dmxProcRenderCompositeGlyphs(ClientPtr client)
         GlyphSetPtr glyphSet;
         dmxGlyphPrivPtr glyphPriv;
 
-        dixLookupResourceByType((pointer *) &pSrc,
+        dixLookupResourceByType((void **) &pSrc,
                                 stuff->src, PictureType, client, DixReadAccess);
 
         pSrcPriv = DMX_GET_PICT_PRIV(pSrc);
         if (!pSrcPriv->pict)
             return ret;
 
-        dixLookupResourceByType((pointer *) &pDst,
+        dixLookupResourceByType((void **) &pDst,
                                 stuff->dst, PictureType,
                                 client, DixWriteAccess);
 
@@ -528,7 +524,7 @@ dmxProcRenderCompositeGlyphs(ClientPtr client)
             return ret;
 
         if (stuff->maskFormat)
-            dixLookupResourceByType((pointer *) &pFmt,
+            dixLookupResourceByType((void **) &pFmt,
                                     stuff->maskFormat, PictFormatType,
                                     client, DixReadAccess);
         else
@@ -589,7 +585,7 @@ dmxProcRenderCompositeGlyphs(ClientPtr client)
         curGlyph = glyphs;
         curElt = elts;
 
-        dixLookupResourceByType((pointer *) &glyphSet,
+        dixLookupResourceByType((void **) &glyphSet,
                                 stuff->glyphset, GlyphSetType,
                                 client, DixReadAccess);
         glyphPriv = DMX_GET_GLYPH_PRIV(glyphSet);
@@ -599,7 +595,7 @@ dmxProcRenderCompositeGlyphs(ClientPtr client)
             buffer += sizeof(xGlyphElt);
 
             if (elt->len == 0xff) {
-                dixLookupResourceByType((pointer *) &glyphSet,
+                dixLookupResourceByType((void **) &glyphSet,
                                         *((CARD32 *) buffer),
                                         GlyphSetType, client, DixReadAccess);
                 glyphPriv = DMX_GET_GLYPH_PRIV(glyphSet);
@@ -898,7 +894,7 @@ dmxDestroyPicture(PicturePtr pPicture)
 
 /** Change the picture's list of clip rectangles. */
 int
-dmxChangePictureClip(PicturePtr pPicture, int clipType, pointer value, int n)
+dmxChangePictureClip(PicturePtr pPicture, int clipType, void *value, int n)
 {
     ScreenPtr pScreen = pPicture->pDrawable->pScreen;
     DMXScreenInfo *dmxScreen = &dmxScreens[pScreen->myNum];

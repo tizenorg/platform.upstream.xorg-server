@@ -33,11 +33,6 @@
 #endif
 #include "win.h"
 
-void
-
-winPushPixels(GCPtr pGC, PixmapPtr pBitMap, DrawablePtr pDrawable, int dx,
-              int dy, int xOrg, int yOrg);
-
 /*
  * Local prototypes
  */
@@ -61,7 +56,7 @@ static void
 
 #if 0
 static void
- winChangeClipNativeGDI(GCPtr pGC, int nType, pointer pValue, int nRects);
+ winChangeClipNativeGDI(GCPtr pGC, int nType, void *pValue, int nRects);
 
 static void
  winDestroyClipNativeGDI(GCPtr pGC);
@@ -135,8 +130,8 @@ winCreateGCNativeGDI(GCPtr pGC)
     ErrorF("winCreateGCNativeGDI - depth: %d\n", pGC->depth);
 #endif
 
-    pGC->ops = (GCOps *) & winGCOps;
-    pGC->funcs = (GCFuncs *) & winGCFuncs;
+    pGC->ops = (GCOps *) &winGCOps;
+    pGC->funcs = (GCFuncs *) &winGCFuncs;
 
     /* We want all coordinates passed to spans functions to be screen relative */
     pGC->miTranslate = TRUE;
@@ -219,7 +214,7 @@ winDestroyGCNativeGDI(GCPtr pGC)
 #if 0
 /* See Porting Layer Definition - p. 46 */
 static void
-winChangeClipNativeGDI(GCPtr pGC, int nType, pointer pValue, int nRects)
+winChangeClipNativeGDI(GCPtr pGC, int nType, void *pValue, int nRects)
 {
 
 }

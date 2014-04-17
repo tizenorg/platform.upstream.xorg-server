@@ -55,7 +55,7 @@ compScreenUpdate(ScreenPtr pScreen)
 }
 
 static void
-compBlockHandler(ScreenPtr pScreen, pointer pTimeout, pointer pReadmask)
+compBlockHandler(ScreenPtr pScreen, void *pTimeout, void *pReadmask)
 {
     CompScreenPtr cs = GetCompScreen(pScreen);
 
@@ -205,7 +205,7 @@ compRedirectWindow(ClientPtr pClient, WindowPtr pWin, int update)
             anyMarked = compMarkWindows(pWin, &pLayerWin);
 
         if (cw->damageRegistered) {
-            DamageUnregister(&pWin->drawable, cw->damage);
+            DamageUnregister(cw->damage);
             cw->damageRegistered = FALSE;
         }
         cw->update = CompositeRedirectManual;
@@ -650,7 +650,7 @@ compSetParentPixmap(WindowPtr pWin)
     CompWindowPtr cw = GetCompWindow(pWin);
 
     if (cw->damageRegistered) {
-        DamageUnregister(&pWin->drawable, cw->damage);
+        DamageUnregister(cw->damage);
         cw->damageRegistered = FALSE;
         DamageEmpty(cw->damage);
     }

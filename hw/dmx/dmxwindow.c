@@ -86,7 +86,7 @@ dmxCreateRootWindow(WindowPtr pWindow)
     parent = dmxScreen->scrnWin;        /* This is our "Screen" window */
     visual = dmxScreen->beVisuals[dmxScreen->beDefVisualIndex].visual;
 
-    dixLookupResourceByType((pointer *) &pCmap, wColormap(pWindow),
+    dixLookupResourceByType((void **) &pCmap, wColormap(pWindow),
                             RT_COLORMAP, NullClient, DixUnknownAccess);
     pCmapPriv = DMX_GET_COLORMAP_PRIV(pCmap);
 
@@ -192,7 +192,7 @@ dmxGetDefaultWindowAttributes(WindowPtr pWindow,
             ColormapPtr pCmap;
             dmxColormapPrivPtr pCmapPriv;
 
-            dixLookupResourceByType((pointer *) &pCmap, wColormap(pWindow),
+            dixLookupResourceByType((void **) &pCmap, wColormap(pWindow),
                                     RT_COLORMAP, NullClient, DixUnknownAccess);
             pCmapPriv = DMX_GET_COLORMAP_PRIV(pCmap);
             *cmap = pCmapPriv->cmap;
@@ -561,7 +561,7 @@ dmxDoChangeWindowAttributes(WindowPtr pWindow,
         ColormapPtr pCmap;
         dmxColormapPrivPtr pCmapPriv;
 
-        dixLookupResourceByType((pointer *) &pCmap, wColormap(pWindow),
+        dixLookupResourceByType((void **) &pCmap, wColormap(pWindow),
                                 RT_COLORMAP, NullClient, DixUnknownAccess);
         pCmapPriv = DMX_GET_COLORMAP_PRIV(pCmap);
         attribs->colormap = pCmapPriv->cmap;
@@ -786,7 +786,7 @@ dmxWindowExposures(WindowPtr pWindow, RegionPtr prgn, RegionPtr other_exposed)
     if (pWinPriv->window) {
         while (XCheckIfEvent(dmxScreen->beDisplay, &ev,
                              dmxWindowExposurePredicate,
-                             (XPointer) & pWinPriv->window)) {
+                             (XPointer) &pWinPriv->window)) {
             /* Handle expose events -- this should not be necessary
                since the base window in which the root window was
                created is guaranteed to be on top (override_redirect),

@@ -28,11 +28,14 @@
 #endif
 #include "ephyr.h"
 #include "ephyrlog.h"
+#include "glx_extinit.h"
 
 extern Window EphyrPreExistingHostWin;
 extern Bool EphyrWantGrayScale;
+extern Bool EphyrWantResize;
 extern Bool kdHasPointer;
 extern Bool kdHasKbd;
+extern Bool ephyr_glamor;
 
 #ifdef GLXEXT
 extern Bool ephyrNoDRI;
@@ -44,7 +47,7 @@ extern KdPointerDriver LinuxEvdevMouseDriver;
 extern KdKeyboardDriver LinuxEvdevKeyboardDriver;
 #endif
 
-void processScreenArg(char *screen_size, char *parent_id);
+void processScreenArg(const char *screen_size, char *parent_id);
 
 void
 InitCard(char *name)
@@ -53,9 +56,25 @@ InitCard(char *name)
     KdCardInfoAdd(&ephyrFuncs, 0);
 }
 
+static const ExtensionModule ephyrExtensions[] = {
+#ifdef GLXEXT
+ { GlxExtensionInit, "GLX", &noGlxExtension },
+#endif
+};
+
+static
+void ephyrExtensionInit(void)
+{
+    LoadExtensionList(ephyrExtensions, ARRAY_SIZE(ephyrExtensions), TRUE);
+}
+
+
 void
 InitOutput(ScreenInfo * pScreenInfo, int argc, char **argv)
 {
+    if (serverGeneration == 1)
+        ephyrExtensionInit();
+
     KdInitOutput(pScreenInfo, argc, argv);
 }
 
@@ -113,9 +132,13 @@ ddxUseMsg(void)
 
     ErrorF("\nXephyr Option Usage:\n");
     ErrorF("-parent <XID>        Use existing window as Xephyr root win\n");
-    ErrorF("-host-cursor         Re-use exisiting X host server cursor\n");
+    ErrorF("-sw-cursor           Render cursors in software in Xephyr\n");
     ErrorF("-fullscreen          Attempt to run Xephyr fullscreen\n");
     ErrorF("-grayscale           Simulate 8bit grayscale\n");
+    ErrorF("-resizeable          Make Xephyr windows resizeable\n");
+#ifdef GLAMOR
+    ErrorF("-glamor              Enable 2D acceleration using glamor\n");
+#endif
     ErrorF
         ("-fakexa              Simulate acceleration using software rendering\n");
     ErrorF("-verbosity <level>   Set log verbosity level\n");
@@ -127,12 +150,10 @@ ddxUseMsg(void)
     ErrorF
         ("-title [title]       set the window title in the WM_NAME property\n");
     ErrorF("\n");
-
-    exit(1);
 }
 
 void
-processScreenArg(char *screen_size, char *parent_id)
+processScreenArg(const char *screen_size, char *parent_id)
 {
     KdCardInfo *card;
 
@@ -145,6 +166,9 @@ processScreenArg(char *screen_size, char *parent_id)
 
         screen = KdScreenInfoAdd(card);
         KdParseScreen(screen, screen_size);
+        screen->driver = calloc(1, sizeof(EphyrScrPriv));
+        if (!screen->driver)
+            FatalError("Couldn't alloc screen private\n");
 
         if (parent_id) {
             p_id = strtol(parent_id, NULL, 0);
@@ -198,8 +222,12 @@ ddxProcessArgument(int argc, char **argv, int i)
         UseMsg();
         exit(1);
     }
+    else if (!strcmp(argv[i], "-sw-cursor")) {
+        hostx_use_sw_cursor();
+        return 1;
+    }
     else if (!strcmp(argv[i], "-host-cursor")) {
-        hostx_use_host_cursor();
+        /* Compatibility with the old command line argument, now the default. */
         return 1;
     }
     else if (!strcmp(argv[i], "-fullscreen")) {
@@ -210,6 +238,20 @@ ddxProcessArgument(int argc, char **argv, int i)
         EphyrWantGrayScale = 1;
         return 1;
     }
+    else if (!strcmp(argv[i], "-resizeable")) {
+        EphyrWantResize = 1;
+        return 1;
+    }
+#ifdef GLAMOR
+    else if (!strcmp (argv[i], "-glamor")) {
+        ephyr_glamor = TRUE;
+        ephyrFuncs.initAccel = ephyr_glamor_init;
+        ephyrFuncs.enableAccel = ephyr_glamor_enable;
+        ephyrFuncs.disableAccel = ephyr_glamor_disable;
+        ephyrFuncs.finiAccel = ephyr_glamor_fini;
+        return 1;
+    }
+#endif
     else if (!strcmp(argv[i], "-fakexa")) {
         ephyrFuncs.initAccel = ephyrDrawInit;
         ephyrFuncs.enableAccel = ephyrDrawEnable;
@@ -363,7 +405,7 @@ ephyrCursorEnable(ScreenPtr pScreen)
 
 KdCardFuncs ephyrFuncs = {
     ephyrCardInit,              /* cardinit */
-    ephyrScreenInit,            /* scrinit */
+    ephyrScreenInitialize,      /* scrinit */
     ephyrInitScreen,            /* initScreen */
     ephyrFinishInitScreen,      /* finishInitScreen */
     ephyrCreateResources,       /* createRes */

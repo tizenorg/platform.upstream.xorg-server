@@ -42,7 +42,7 @@
 #include "winmsg.h"
 #include "inputstr.h"
 
-extern void winUpdateWindowPosition(HWND hWnd, Bool reshape, HWND * zstyle);
+extern void winUpdateWindowPosition(HWND hWnd, HWND * zstyle);
 
 /*
  * Local globals
@@ -316,6 +316,7 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     static Bool s_fTracking = FALSE;
     Bool needRestack = FALSE;
     LRESULT ret;
+    static Bool hasEnteredSizeMove = FALSE;
 
 #if CYGDEBUG
     winDebugWin32Message("winTopLevelWindowProc", hwnd, message, wParam,
@@ -343,7 +344,7 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         /* */
         wmMsg.msg = 0;
         wmMsg.hwndWindow = hwnd;
-        wmMsg.iWindow = (Window) GetProp(hwnd, WIN_WID_PROP);
+        wmMsg.iWindow = (Window) (INT_PTR) GetProp(hwnd, WIN_WID_PROP);
 
         wmMsg.iX = pDraw->x;
         wmMsg.iY = pDraw->y;
@@ -391,8 +392,8 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         /* */
         SetProp(hwnd,
                 WIN_WID_PROP,
-                (HANDLE) winGetWindowID(((LPCREATESTRUCT) lParam)->
-                                        lpCreateParams));
+                (HANDLE) (INT_PTR) winGetWindowID(((LPCREATESTRUCT) lParam)->
+                                                  lpCreateParams));
 
         /*
          * Make X windows' Z orders sync with Windows windows because
@@ -420,14 +421,14 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         /*
          * Add whatever the setup file wants to for this window
          */
-        SetupSysMenu((unsigned long) hwnd);
+        SetupSysMenu(hwnd);
         return 0;
 
     case WM_SYSCOMMAND:
         /*
          * Any window menu items go through here
          */
-        if (HandleCustomWM_COMMAND((unsigned long) hwnd, LOWORD(wParam))) {
+        if (HandleCustomWM_COMMAND(hwnd, LOWORD(wParam))) {
             /* Don't pass customized menus to DefWindowProc */
             return 0;
         }
@@ -443,7 +444,7 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_INITMENU:
         /* Checks/Unchecks any menu items before they are displayed */
-        HandleCustomWM_INITMENU((unsigned long) hwnd, wParam);
+        HandleCustomWM_INITMENU(hwnd, (HMENU)wParam);
         break;
 
     case WM_ERASEBKGND:
@@ -498,7 +499,7 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
                           NULL,
                           GetLastError(),
                           MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                          (LPTSTR) & lpMsgBuf, 0, NULL);
+                          (LPTSTR) &lpMsgBuf, 0, NULL);
 
             ErrorF("winTopLevelWindowProc - BitBlt failed: %s\n",
                    (LPSTR) lpMsgBuf);
@@ -661,7 +662,7 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         if (s_pScreenPriv == NULL || s_pScreenInfo->fIgnoreInput)
             break;
         SetCapture(hwnd);
-        return winMouseButtonsHandle(s_pScreen, ButtonPress, HIWORD(wParam) + 5,
+        return winMouseButtonsHandle(s_pScreen, ButtonPress, HIWORD(wParam) + 7,
                                      wParam);
 
     case WM_XBUTTONUP:
@@ -670,9 +671,21 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         ReleaseCapture();
         winStartMousePolling(s_pScreenPriv);
         return winMouseButtonsHandle(s_pScreen, ButtonRelease,
-                                     HIWORD(wParam) + 5, wParam);
+                                     HIWORD(wParam) + 7, wParam);
 
     case WM_MOUSEWHEEL:
+        if (SendMessage
+            (hwnd, WM_NCHITTEST, 0,
+             MAKELONG(GET_X_LPARAM(lParam),
+                      GET_Y_LPARAM(lParam))) == HTCLIENT) {
+            /* Pass the message to the root window */
+            SendMessage(hwndScreen, message, wParam, lParam);
+            return 0;
+        }
+        else
+            break;
+
+    case WM_MOUSEHWHEEL:
         if (SendMessage
             (hwnd, WM_NCHITTEST, 0,
              MAKELONG(GET_X_LPARAM(lParam),
@@ -813,7 +826,7 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         /* Prevent the mouse wheel from stalling when another window is minimized */
         if (HIWORD(wParam) == 0 && LOWORD(wParam) == WA_ACTIVE &&
-            (HWND) lParam != NULL && (HWND) lParam != (HWND) GetParent(hwnd))
+            (HWND) lParam != NULL && (HWND) lParam != GetParent(hwnd))
             SetFocus(hwnd);
         return 0;
 
@@ -825,6 +838,8 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_CLOSE:
+        /* Remove AppUserModelID property */
+        winSetAppUserModelID(hwnd, NULL);
         /* Branch on if the window was killed in X already */
         if (pWinPriv->fXKilled) {
             /* Window was killed, go ahead and destroy the window */
@@ -858,7 +873,9 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_MOVE:
         /* Adjust the X Window to the moved Windows window */
-        winAdjustXWindow(pWin, hwnd);
+        if (!hasEnteredSizeMove)
+            winAdjustXWindow(pWin, hwnd);
+        /* else: Wait for WM_EXITSIZEMOVE */
         return 0;
 
     case WM_SHOWWINDOW:
@@ -868,41 +885,36 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
         /* */
         if (!pWin->overrideRedirect) {
+            HWND zstyle = HWND_NOTOPMOST;
+
             /* Flag that this window needs to be made active when clicked */
             SetProp(hwnd, WIN_NEEDMANAGE_PROP, (HANDLE) 1);
 
-            if (!(GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_APPWINDOW)) {
-                HWND zstyle = HWND_NOTOPMOST;
+            /* Set the transient style flags */
+            if (GetParent(hwnd))
+                SetWindowLongPtr(hwnd, GWL_STYLE,
+                                 WS_POPUP | WS_OVERLAPPED | WS_SYSMENU |
+                                 WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+            /* Set the window standard style flags */
+            else
+                SetWindowLongPtr(hwnd, GWL_STYLE,
+                                 (WS_POPUP | WS_OVERLAPPEDWINDOW |
+                                  WS_CLIPCHILDREN | WS_CLIPSIBLINGS)
+                                 & ~WS_CAPTION & ~WS_SIZEBOX);
 
-                /* Set the window extended style flags */
-                SetWindowLongPtr(hwnd, GWL_EXSTYLE, WS_EX_APPWINDOW);
+            winUpdateWindowPosition(hwnd, &zstyle);
 
-                /* Set the transient style flags */
-                if (GetParent(hwnd))
-                    SetWindowLongPtr(hwnd, GWL_STYLE,
-                                     WS_POPUP | WS_OVERLAPPED | WS_SYSMENU |
-                                     WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
-                /* Set the window standard style flags */
-                else
-                    SetWindowLongPtr(hwnd, GWL_STYLE,
-                                     (WS_POPUP | WS_OVERLAPPEDWINDOW |
-                                      WS_CLIPCHILDREN | WS_CLIPSIBLINGS)
-                                     & ~WS_CAPTION & ~WS_SIZEBOX);
+            {
+                WinXWMHints hints;
 
-                winUpdateWindowPosition(hwnd, FALSE, &zstyle);
-
-                {
-                    WinXWMHints hints;
-
-                    if (winMultiWindowGetWMHints(pWin, &hints)) {
-                        /*
-                           Give the window focus, unless it has an InputHint
-                           which is FALSE (this is used by e.g. glean to
-                           avoid every test window grabbing the focus)
-                         */
-                        if (!((hints.flags & InputHint) && (!hints.input))) {
-                            SetForegroundWindow(hwnd);
-                        }
+                if (winMultiWindowGetWMHints(pWin, &hints)) {
+                    /*
+                       Give the window focus, unless it has an InputHint
+                       which is FALSE (this is used by e.g. glean to
+                       avoid every test window grabbing the focus)
+                     */
+                    if (!((hints.flags & InputHint) && (!hints.input))) {
+                        SetForegroundWindow(hwnd);
                     }
                 }
             }
@@ -996,6 +1008,16 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
          */
         break;
 
+    case WM_ENTERSIZEMOVE:
+        hasEnteredSizeMove = TRUE;
+        return 0;
+
+    case WM_EXITSIZEMOVE:
+        /* Adjust the X Window to the moved Windows window */
+        hasEnteredSizeMove = FALSE;
+        winAdjustXWindow(pWin, hwnd);
+        return 0;
+
     case WM_SIZE:
         /* see dix/window.c */
 #if CYGWINDOWING_DEBUG
@@ -1020,8 +1042,11 @@ winTopLevelWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
                (int) (GetTickCount()));
     }
 #endif
-        /* Adjust the X Window to the moved Windows window */
-        winAdjustXWindow(pWin, hwnd);
+        if (!hasEnteredSizeMove) {
+            /* Adjust the X Window to the moved Windows window */
+            winAdjustXWindow(pWin, hwnd);
+        }
+        /* else: wait for WM_EXITSIZEMOVE */
         return 0;               /* end of WM_SIZE handler */
 
     case WM_STYLECHANGING:

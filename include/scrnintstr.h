@@ -262,12 +262,12 @@ typedef void (*SendGraphicsExposeProcPtr) (ClientPtr /*client */ ,
                                            int /*minor */ );
 
 typedef void (*ScreenBlockHandlerProcPtr) (ScreenPtr /*pScreen*/ ,
-                                           pointer /*pTimeout */ ,
-                                           pointer /*pReadmask */ );
+                                           void */*pTimeout */ ,
+                                           void */*pReadmask */ );
 
 typedef void (*ScreenWakeupHandlerProcPtr) (ScreenPtr /*pScreen*/ ,
                                             unsigned long /*result */ ,
-                                            pointer /*pReadMask */ );
+                                            void */*pReadMask */ );
 
 typedef Bool (*CreateScreenResourcesProcPtr) (ScreenPtr /*pScreen */ );
 
@@ -277,7 +277,7 @@ typedef Bool (*ModifyPixmapHeaderProcPtr) (PixmapPtr /*pPixmap */ ,
                                            int /*depth */ ,
                                            int /*bitsPerPixel */ ,
                                            int /*devKind */ ,
-                                           pointer /*pPixData */ );
+                                           void */*pPixData */ );
 
 typedef PixmapPtr (*GetWindowPixmapProcPtr) (WindowPtr /*pWin */ );
 
@@ -355,6 +355,11 @@ typedef Bool (*StopPixmapTrackingProcPtr)(PixmapPtr, PixmapPtr);
 
 typedef Bool (*ReplaceScanoutPixmapProcPtr)(DrawablePtr, PixmapPtr, Bool);
 
+typedef WindowPtr (*XYToWindowProcPtr)(ScreenPtr pScreen,
+                                       SpritePtr pSprite, int x, int y);
+
+typedef int (*NameWindowPixmapProcPtr)(WindowPtr, PixmapPtr, CARD32);
+
 typedef struct _Screen {
     int myNum;                  /* index of this instance in Screens[] */
     ATOM id;
@@ -377,7 +382,7 @@ typedef struct _Screen {
        a standard one.
      */
     PixmapPtr PixmapPerDepth[1];
-    pointer devPrivate;
+    void *devPrivate;
     short numVisuals;
     VisualPtr visuals;
     WindowPtr root;
@@ -465,6 +470,7 @@ typedef struct _Screen {
     SetWindowPixmapProcPtr SetWindowPixmap;
     GetScreenPixmapProcPtr GetScreenPixmap;
     SetScreenPixmapProcPtr SetScreenPixmap;
+    NameWindowPixmapProcPtr NameWindowPixmap;
 
     PixmapPtr pScratchPixmap;   /* scratch pixmap "pool" */
 
@@ -515,6 +521,7 @@ typedef struct _Screen {
     struct xorg_list offload_head;
 
     ReplaceScanoutPixmapProcPtr ReplaceScanoutPixmap;
+    XYToWindowProcPtr XYToWindow;
 } ScreenRec;
 
 static inline RegionPtr

@@ -68,9 +68,12 @@
 #include <GL/glx.h>
 #include <GL/glxint.h>
 #include "dmx_glxvisuals.h"
+#include "glx_extinit.h"
 #include <X11/extensions/Xext.h>
 #include <X11/extensions/extutil.h>
 #endif                          /* GLXEXT */
+
+#include <X11/extensions/dmxproto.h>
 
 /* Global variables available to all Xserver/hw/dmx routines. */
 int dmxNumScreens;
@@ -78,8 +81,6 @@ DMXScreenInfo *dmxScreens;
 
 int dmxNumInputs;
 DMXInputInfo *dmxInputs;
-
-int dmxShadowFB = FALSE;
 
 XErrorEvent dmxLastErrorEvent;
 Bool dmxErrorOccurred = FALSE;
@@ -107,6 +108,8 @@ Bool dmxGLXSyncSwap = FALSE;
 
 Bool dmxGLXFinishSwap = FALSE;
 #endif
+
+RESTYPE RRProviderType = 0;
 
 Bool dmxIgnoreBadFontPaths = FALSE;
 
@@ -586,6 +589,18 @@ dmxExecHost(void)
     return buffer;
 }
 
+static void dmxAddExtensions(Bool glxSupported)
+{
+    const ExtensionModule dmxExtensions[] = {
+        { DMXExtensionInit, DMX_EXTENSION_NAME, NULL },
+#ifdef GLXEXT
+        { GlxExtensionInit, "GLX", &glxSupported },
+#endif
+    };
+
+    LoadExtensionList(dmxExtensions, ARRAY_SIZE(dmxExtensions), TRUE);
+}
+
 /** This routine is called in Xserver/dix/main.c from \a main(). */
 void
 InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
@@ -594,7 +609,9 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
     static unsigned long dmxGeneration = 0;
 
 #ifdef GLXEXT
-    Bool glxSupported = TRUE;
+    static Bool glxSupported = TRUE;
+#else
+    const Bool glxSupported = FALSE;
 #endif
 
     if (dmxGeneration != serverGeneration) {
@@ -725,6 +742,9 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
         glxSupported &= (dmxScreens[i].glxMajorOpcode > 0);
 #endif
 
+    if (serverGeneration == 1)
+        dmxAddExtensions(glxSupported);
+
     /* Tell dix layer about the backend displays */
     for (i = 0; i < dmxNumScreens; i++) {
 
@@ -834,9 +854,6 @@ InitOutput(ScreenInfo * pScreenInfo, int argc, char *argv[])
     /* Initialized things that need timer hooks */
     dmxStatInit();
     dmxSyncInit();              /* Calls RegisterBlockAndWakeupHandlers */
-
-    dmxLog(dmxInfo, "Shadow framebuffer support %s\n",
-           dmxShadowFB ? "enabled" : "disabled");
 }
 
 /* RATS: Assuming the fp string (which comes from the command-line argv
@@ -931,10 +948,6 @@ ddxProcessArgument(int argc, char *argv[], int i)
         retval = 2;
     }
     else if (!strcmp(argv[i], "-noshadowfb")) {
-        dmxLog(dmxWarning,
-               "-noshadowfb has been deprecated "
-               "since it is now the default\n");
-        dmxShadowFB = FALSE;
         retval = 1;
     }
     else if (!strcmp(argv[i], "-nomulticursor")) {
@@ -942,7 +955,6 @@ ddxProcessArgument(int argc, char *argv[], int i)
         retval = 1;
     }
     else if (!strcmp(argv[i], "-shadowfb")) {
-        dmxShadowFB = TRUE;
         retval = 1;
     }
     else if (!strcmp(argv[i], "-configfile")) {

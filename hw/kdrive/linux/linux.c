@@ -63,7 +63,7 @@ LinuxVTRequest(int sig)
 
 /* Check before chowning -- this avoids touching the file system */
 static void
-LinuxCheckChown(char *file)
+LinuxCheckChown(const char *file)
 {
     struct stat st;
     __uid_t u;
@@ -167,14 +167,14 @@ LinuxSetSwitchMode(int mode)
 }
 
 static void
-LinuxApmBlock(pointer blockData, OSTimePtr pTimeout, pointer pReadmask)
+LinuxApmBlock(void *blockData, OSTimePtr pTimeout, void *pReadmask)
 {
 }
 
 static Bool LinuxApmRunning;
 
 static void
-LinuxApmWakeup(pointer blockData, int result, pointer pReadmask)
+LinuxApmWakeup(void *blockData, int result, void *pReadmask)
 {
     fd_set *readmask = (fd_set *) pReadmask;
 
