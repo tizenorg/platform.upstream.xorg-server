@@ -3239,7 +3239,7 @@ InitializeSprite(DeviceIntPtr pDev, WindowPtr pWin)
     pCursor = RefCursor(pCursor);
     if (pSprite->current)
         FreeCursor(pSprite->current, None);
-    pSprite->current = RefCursor(pCursor);
+    pSprite->current = pCursor;
 
     if (pScreen) {
         (*pScreen->RealizeCursor) (pDev, pScreen, pSprite->current);
@@ -4262,12 +4262,6 @@ DeliverGrabbedEvent(InternalEvent *event, DeviceIntPtr thisDev,
                                              thisDev);
     }
     if (!deliveries) {
-        /* XXX: In theory, we could pass the internal events through to
-         * everything and only convert just before hitting the wire. We can't
-         * do that yet, so DGE is the last stop for internal events. From here
-         * onwards, we deal with core/XI events.
-         */
-
         sendCore = (IsMaster(thisDev) && thisDev->coreEvents);
         /* try core event */
         if ((sendCore && grab->grabtype == CORE) || grab->grabtype != CORE)
