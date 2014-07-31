@@ -45,13 +45,17 @@ BuildRequires:  pkgconfig(xorg-macros)
 BuildRequires:  pkgconfig(xproto)
 BuildRequires:  pkgconfig(xtrans)
 BuildRequires:  pkgconfig(xv)
+
+%ifarch %ix86 x86_64
 BuildRequires:  pkgconfig(glproto)
 BuildRequires:  pkgconfig(xf86driproto)
+%endif
+
 %if %{with mesa}
 BuildRequires:  pkgconfig(dri)
 BuildRequires:  pkgconfig(gl)
 %else
-BuildRequires: pkgconfig(gles20)
+# BuildRequires: pkgconfig(gles20)
 %endif
 
 Provides:	xorg-x11-server
