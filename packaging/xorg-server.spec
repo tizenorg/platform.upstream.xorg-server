@@ -2,7 +2,7 @@
 %bcond_with x
 
 Name:           xorg-server
-Version:        1.15.99.902
+Version:        1.16
 Release:        1
 License:        MIT
 Summary:        X Server
