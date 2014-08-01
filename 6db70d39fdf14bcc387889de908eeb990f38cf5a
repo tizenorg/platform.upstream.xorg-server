@@ -1,3 +1,12 @@
+Code-Review+2: Boram Park <boram1288.park@samsung.com>
+Verified+1: Boram Park <boram1288.park@samsung.com>
+Code-Review+1: Stéphane Desneux (sdx) <stephane.desneux@open.eurogiciel.org>
+Submitted-by: Boram Park <boram1288.park@samsung.com>
+Submitted-at: Thu, 31 Jul 2014 21:43:36 -0700
+Reviewed-on: https://review.tizen.org/gerrit/25223
+Project: platform/upstream/xorg-server
+Branch: refs/heads/tizen
+
 Reviewed-on: https://review.tizen.org/gerrit/25223
 Project: platform/upstream/xorg-server
 Branch: refs/heads/tizen
