@@ -224,6 +224,7 @@ typedef struct {
     int dev_screen;
     XF86OptionPtr dev_option_lst;
     char *dev_comment;
+    char *match_seat;
 } XF86ConfDeviceRec, *XF86ConfDevicePtr;
 
 typedef struct {
@@ -275,6 +276,7 @@ typedef struct {
     XF86OptionPtr scrn_option_lst;
     char *scrn_comment;
     int scrn_virtualX, scrn_virtualY;
+    char *match_seat;
 } XF86ConfScreenRec, *XF86ConfScreenPtr;
 
 typedef struct {
@@ -325,6 +327,14 @@ typedef struct {
     char *comment;
 } XF86ConfInputClassRec, *XF86ConfInputClassPtr;
 
+typedef struct {
+    GenericListRec list;
+    char *identifier;
+    char *driver;
+    struct xorg_list match_driver;
+    char *comment;
+} XF86ConfOutputClassRec, *XF86ConfOutputClassPtr;
+
 /* Values for adj_where */
 #define CONF_ADJ_OBSOLETE	-1
 #define CONF_ADJ_ABSOLUTE	0
@@ -366,6 +376,7 @@ typedef struct {
     XF86ConfInactivePtr lay_inactive_lst;
     XF86ConfInputrefPtr lay_input_lst;
     XF86OptionPtr lay_option_lst;
+    char *match_seat;
     char *lay_comment;
 } XF86ConfLayoutRec, *XF86ConfLayoutPtr;
 
@@ -408,6 +419,7 @@ typedef struct {
     XF86ConfScreenPtr conf_screen_lst;
     XF86ConfInputPtr conf_input_lst;
     XF86ConfInputClassPtr conf_inputclass_lst;
+    XF86ConfOutputClassPtr conf_outputclass_lst;
     XF86ConfLayoutPtr conf_layout_lst;
     XF86ConfVendorPtr conf_vendor_lst;
     XF86ConfDRIPtr conf_dri;

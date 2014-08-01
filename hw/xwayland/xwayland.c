@@ -218,7 +218,6 @@ xwl_realize_window(WindowPtr window)
     screen->RealizeWindow = xwl_realize_window;
 
     if (xwl_screen->rootless && !window->parent) {
-        ErrorF("Clearing root clip\n");
         RegionNull(&window->clipList);
         RegionNull(&window->borderClip);
         RegionNull(&window->winSize);
@@ -338,7 +337,13 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 
         pixmap = (*xwl_screen->screen->GetWindowPixmap) (xwl_window->window);
 
-        buffer = xwl_shm_pixmap_get_wl_buffer(pixmap);
+#if GLAMOR_HAS_GBM
+        if (xwl_screen->glamor)
+            buffer = xwl_glamor_pixmap_get_wl_buffer(pixmap);
+#endif
+        if (!xwl_screen->glamor)
+            buffer = xwl_shm_pixmap_get_wl_buffer(pixmap);
+
         wl_surface_attach(xwl_window->surface, buffer, 0, 0);
         for (i = 0; i < count; i++) {
             box = &RegionRects(region)[i];
@@ -374,6 +379,12 @@ registry_global(void *data, struct wl_registry *registry, uint32_t id,
         xwl_output_create(xwl_screen, id);
         xwl_screen->expecting_event++;
     }
+#ifdef GLAMOR_HAS_GBM
+    else if (xwl_screen->glamor &&
+             strcmp(interface, "wl_drm") == 0 && version >= 2) {
+        xwl_screen_init_glamor(xwl_screen, id, version);
+    }
+#endif
 }
 
 static void
@@ -496,6 +507,10 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     dixSetPrivate(&pScreen->devPrivates, &xwl_screen_private_key, xwl_screen);
     xwl_screen->screen = pScreen;
 
+#ifdef GLAMOR_HAS_GBM
+    xwl_screen->glamor = 1;
+#endif
+
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-rootless") == 0) {
             xwl_screen->rootless = 1;
@@ -514,6 +529,9 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
             xwl_screen->listen_fds[xwl_screen->listen_fd_count++] =
                 atoi(argv[i + 1]);
             i++;
+        }
+        else if (strcmp(argv[i], "-shm") == 0) {
+            xwl_screen->glamor = 0;
         }
     }
 
@@ -573,8 +591,10 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
 
     fbPictureInit(pScreen, 0, 0);
 
+#ifdef HAVE_XSHMFENCE
     if (!miSyncShmScreenInit(pScreen))
         return FALSE;
+#endif
 
     xwl_screen->wayland_fd = wl_display_get_fd(xwl_screen->display);
     AddGeneralSocket(xwl_screen->wayland_fd);
@@ -590,10 +610,19 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     if (!xwl_screen_init_cursor(xwl_screen))
         return FALSE;
 
-    xwl_screen->CreateScreenResources = pScreen->CreateScreenResources;
-    pScreen->CreateScreenResources = xwl_shm_create_screen_resources;
-    pScreen->CreatePixmap = xwl_shm_create_pixmap;
-    pScreen->DestroyPixmap = xwl_shm_destroy_pixmap;
+#ifdef GLAMOR_HAS_GBM
+    if (xwl_screen->glamor && !xwl_glamor_init(xwl_screen)) {
+        ErrorF("Failed to initialize glamor, falling back to sw\n");
+        xwl_screen->glamor = 0;
+    }
+#endif
+
+    if (!xwl_screen->glamor) {
+        xwl_screen->CreateScreenResources = pScreen->CreateScreenResources;
+        pScreen->CreateScreenResources = xwl_shm_create_screen_resources;
+        pScreen->CreatePixmap = xwl_shm_create_pixmap;
+        pScreen->DestroyPixmap = xwl_shm_destroy_pixmap;
+    }
 
     xwl_screen->RealizeWindow = pScreen->RealizeWindow;
     pScreen->RealizeWindow = xwl_realize_window;
@@ -616,8 +645,10 @@ xwl_log_handler(const char *format, va_list args)
     FatalError("%s", msg);
 }
 
-static const ExtensionModule glx_extension[] = {
+static const ExtensionModule xwayland_extensions[] = {
+#ifdef GLXEXT
     { GlxExtensionInit, "GLX", &noGlxExtension },
+#endif
 };
 
 void
@@ -639,7 +670,8 @@ InitOutput(ScreenInfo * screen_info, int argc, char **argv)
     screen_info->bitmapBitOrder = BITMAP_BIT_ORDER;
     screen_info->numPixmapFormats = ARRAY_SIZE(depths);
 
-    LoadExtensionList(glx_extension, ARRAY_SIZE(glx_extension), FALSE);
+    LoadExtensionList(xwayland_extensions,
+                      ARRAY_SIZE(xwayland_extensions), FALSE);
 
     /* Cast away warning from missing printf annotation for
      * wl_log_func_t.  Wayland 1.5 will have the annotation, so we can

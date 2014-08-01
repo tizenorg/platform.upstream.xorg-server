@@ -130,6 +130,7 @@ typedef struct _DRI2Screen {
     HandleExposuresProcPtr HandleExposures;
 
     ConfigNotifyProcPtr ConfigNotify;
+    SetWindowPixmapProcPtr SetWindowPixmap;
     DRI2CreateBuffer2ProcPtr CreateBuffer2;
     DRI2DestroyBuffer2ProcPtr DestroyBuffer2;
     DRI2CopyRegion2ProcPtr CopyRegion2;
@@ -161,11 +162,9 @@ GetScreenPrime(ScreenPtr master, int prime_id)
 
         ds = DRI2GetScreen(slave);
         if (ds->prime_id == prime_id)
-            break;
+            return slave;
     }
-    if (!slave)
-        return master;
-    return slave;
+    return master;
 }
 
 static DRI2ScreenPtr
@@ -441,18 +440,14 @@ DRI2DrawableGone(void *p, XID id)
 }
 
 static DRI2BufferPtr
-create_buffer(DrawablePtr pDraw,
+create_buffer(DRI2ScreenPtr ds, DrawablePtr pDraw,
               unsigned int attachment, unsigned int format)
 {
-    ScreenPtr primeScreen;
-    DRI2DrawablePtr pPriv;
-    DRI2ScreenPtr ds;
     DRI2BufferPtr buffer;
-    pPriv = DRI2GetDrawable(pDraw);
-    primeScreen = GetScreenPrime(pDraw->pScreen, pPriv->prime_id);
-    ds = DRI2GetScreenPrime(pDraw->pScreen, pPriv->prime_id);
     if (ds->CreateBuffer2)
-        buffer = (*ds->CreateBuffer2)(primeScreen, pDraw, attachment, format);
+        buffer = (*ds->CreateBuffer2)(GetScreenPrime(pDraw->pScreen,
+                                                     DRI2GetDrawable(pDraw)->prime_id),
+                                      pDraw, attachment, format);
     else
         buffer = (*ds->CreateBuffer)(pDraw, attachment, format);
     return buffer;
@@ -503,7 +498,7 @@ allocate_or_reuse_buffer(DrawablePtr pDraw, DRI2ScreenPtr ds,
         || attachment == DRI2BufferFrontLeft
 #endif
         || !dimensions_match || (pPriv->buffers[old_buf]->format != format)) {
-        *buffer = create_buffer (pDraw, attachment, format);
+        *buffer = create_buffer(ds, pDraw, attachment, format);
         return TRUE;
 
     }
@@ -566,7 +561,7 @@ do_get_buffers(DrawablePtr pDraw, int *width, int *height,
         return NULL;
     }
 
-    ds = DRI2GetScreen(pDraw->pScreen);
+    ds = DRI2GetScreenPrime(pDraw->pScreen, pPriv->prime_id);
 
     dimensions_match = (pDraw->width == pPriv->width)
         && (pDraw->height == pPriv->height);
@@ -1262,6 +1257,14 @@ DRI2SwapBuffers(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
         return BadDrawable;
     }
 
+    /* According to spec, return expected swapbuffers count SBC after this swap
+     * will complete. This is ignored unless we return Success, but it must be
+     * initialized on every path where we return Success or the caller will send
+     * an uninitialized value off the stack to the client. So let's initialize
+     * it as early as possible, just to be sure.
+     */
+    *swap_target = pPriv->swap_count + pPriv->swapsPending + 1;
+
     for (i = 0; i < pPriv->bufferCount; i++) {
         if (pPriv->buffers[i]->attachment == DRI2BufferFrontLeft)
             pDestBuffer = (DRI2BufferPtr) pPriv->buffers[i];
@@ -1319,17 +1322,13 @@ DRI2SwapBuffers(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
          * we have to account for the current swap count, interval, and the
          * number of pending swaps.
          */
-        *swap_target = pPriv->last_swap_target + pPriv->swap_interval;
+        target_msc = pPriv->last_swap_target + pPriv->swap_interval;
 
-    }
-    else {
-        /* glXSwapBuffersMscOML could have a 0 target_msc, honor it */
-        *swap_target = target_msc;
     }
 
     pPriv->swapsPending++;
     ret = (*ds->ScheduleSwap) (client, pDraw, pDestBuffer, pSrcBuffer,
-                               swap_target, divisor, remainder, func, data);
+                               &target_msc, divisor, remainder, func, data);
     if (!ret) {
         pPriv->swapsPending--;  /* didn't schedule */
         xf86DrvMsg(pScreen->myNum, X_ERROR,
@@ -1337,12 +1336,7 @@ DRI2SwapBuffers(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
         return BadDrawable;
     }
 
-    pPriv->last_swap_target = *swap_target;
-
-    /* According to spec, return expected swapbuffers count SBC after this swap
-     * will complete.
-     */
-    *swap_target = pPriv->swap_count + pPriv->swapsPending;
+    pPriv->last_swap_target = target_msc;
 
     DRI2InvalidateDrawableAll(pDraw);
 
@@ -1586,6 +1580,21 @@ DRI2ConfigNotify(WindowPtr pWin, int x, int y, int w, int h, int bw,
     return Success;
 }
 
+static void
+DRI2SetWindowPixmap(WindowPtr pWin, PixmapPtr pPix)
+{
+    DrawablePtr pDraw = (DrawablePtr) pWin;
+    ScreenPtr pScreen = pDraw->pScreen;
+    DRI2ScreenPtr ds = DRI2GetScreen(pScreen);
+
+    pScreen->SetWindowPixmap = ds->SetWindowPixmap;
+    (*pScreen->SetWindowPixmap) (pWin, pPix);
+    ds->SetWindowPixmap = pScreen->SetWindowPixmap;
+    pScreen->SetWindowPixmap = DRI2SetWindowPixmap;
+
+    DRI2InvalidateDrawableAll(pDraw);
+}
+
 #define MAX_PRIME DRI2DriverPrimeMask
 static int
 get_prime_id(void)
@@ -1738,6 +1747,9 @@ DRI2ScreenInit(ScreenPtr pScreen, DRI2InfoPtr info)
     ds->ConfigNotify = pScreen->ConfigNotify;
     pScreen->ConfigNotify = DRI2ConfigNotify;
 
+    ds->SetWindowPixmap = pScreen->SetWindowPixmap;
+    pScreen->SetWindowPixmap = DRI2SetWindowPixmap;
+
     xf86DrvMsg(pScreen->myNum, X_INFO, "[DRI2] Setup complete\n");
     for (i = 0; i < sizeof(driverTypeNames) / sizeof(driverTypeNames[0]); i++) {
         if (i < ds->numDrivers && ds->driverNames[i]) {
@@ -1762,6 +1774,7 @@ DRI2CloseScreen(ScreenPtr pScreen)
     DRI2ScreenPtr ds = DRI2GetScreen(pScreen);
 
     pScreen->ConfigNotify = ds->ConfigNotify;
+    pScreen->SetWindowPixmap = ds->SetWindowPixmap;
 
     if (ds->prime_id)
         prime_id_allocate_bitmask &= ~(1 << ds->prime_id);
