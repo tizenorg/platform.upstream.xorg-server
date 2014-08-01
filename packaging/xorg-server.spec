@@ -229,8 +229,10 @@ rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 %dir %{_libdir}/xorg
 %dir %{_libdir}/xorg/modules
 %if %{with mesa}
+%ifarch %ix86 x86_64
 %dir %{_libdir}/xorg/modules/extensions
 %{_libdir}/xorg/modules/extensions/*.so
+%endif
 %endif
 %dir %{_libdir}/xorg/modules/multimedia
 %{_libdir}/xorg/modules/multimedia/*.so
@@ -251,8 +253,10 @@ rm %{buildroot}/var/lib/xkb/compiled/README.compiled
 %dir %{_libdir}/xorg
 %dir %{_libdir}/xorg/modules
 %if %{with mesa}
+%ifarch %ix86 x86_64
 %dir %{_libdir}/xorg/modules/extensions
 %{_libdir}/xorg/modules/extensions/*.so
+%endif
 %endif
 %dir %{_libdir}/xorg/modules/multimedia
 %{_libdir}/xorg/modules/multimedia/*.so
