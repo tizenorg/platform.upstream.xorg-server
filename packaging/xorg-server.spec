@@ -47,6 +47,7 @@ BuildRequires:  pkgconfig(xtrans)
 BuildRequires:  pkgconfig(xv)
 BuildRequires:  pkgconfig(presentproto)
 BuildRequires:  pkgconfig(dri3proto)
+BuildRequires:  pkgconfig(xshmfence)
 
 %ifarch %ix86 x86_64
 BuildRequires:  pkgconfig(glproto)
