@@ -45,6 +45,8 @@ BuildRequires:  pkgconfig(xorg-macros)
 BuildRequires:  pkgconfig(xproto)
 BuildRequires:  pkgconfig(xtrans)
 BuildRequires:  pkgconfig(xv)
+BuildRequires:  pkgconfig(presentproto)
+BuildRequires:  pkgconfig(dri3proto)
 
 %ifarch %ix86 x86_64
 BuildRequires:  pkgconfig(glproto)
@@ -172,8 +174,6 @@ NOCONFIGURE=1 ./autogen.sh
 	--disable-kdrive \
 	--disable-xephyr \
 	--disable-xfake \
-	--disable-dri3 \
-	--disable-present \
 	--disable-xwayland \
 	--disable-xfbdev \
 	--disable-kdrive-kbd \
