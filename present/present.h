@@ -83,6 +83,17 @@ typedef Bool (*present_flip_ptr) (RRCrtcPtr crtc,
 typedef void (*present_unflip_ptr) (ScreenPtr screen,
                                     uint64_t event_id);
 
+/* Add in for Tizen.
+ *
+ * Check the possibility to do copy by DDX.
+ * If DDX does copy it must return TRUE, another case - FALSE.
+ */
+typedef Bool (*present_copy_region_ptr) (DrawablePtr drawable,
+                                         PixmapPtr pixmap,
+                                         RegionPtr update,
+                                         int16_t x_off,
+                                         int16_t y_off);
+
 #define PRESENT_SCREEN_INFO_VERSION        0
 
 typedef struct present_screen_info {
@@ -97,6 +108,10 @@ typedef struct present_screen_info {
     present_check_flip_ptr              check_flip;
     present_flip_ptr                    flip;
     present_unflip_ptr                  unflip;
+
+    /* Add in for Tizen
+     */
+    present_copy_region_ptr             copy_region;
 
 } present_screen_info_rec, *present_screen_info_ptr;
 
