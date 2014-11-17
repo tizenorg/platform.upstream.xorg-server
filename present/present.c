@@ -58,6 +58,17 @@ present_copy_region(DrawablePtr drawable,
     ScreenPtr   screen = drawable->pScreen;
     GCPtr       gc;
 
+#ifdef _F_DRI3_COPY_REGION_CB_
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    /* Can the DDX do copy by itself?*/
+    if(screen_priv->info->copy_region) {
+        if ((*screen_priv->info->copy_region) (drawable, pixmap, update, x_off, y_off)) {
+            return;
+        }
+    }
+#endif
+
     gc = GetScratchGC(drawable->depth, screen);
     if (update) {
         ChangeGCVal     changes[2];
@@ -91,7 +102,7 @@ present_flip_pending_pixmap(ScreenPtr screen)
 
     if (!screen_priv->flip_pending)
         return NULL;
-        
+
     return screen_priv->flip_pending->pixmap;
 }
 
@@ -368,7 +379,7 @@ present_set_tree_pixmap_visit(WindowPtr window, void *data)
     (*screen->SetWindowPixmap)(window, visit->new);
     return WT_WALKCHILDREN;
 }
-    
+
 static void
 present_set_tree_pixmap(WindowPtr window, PixmapPtr pixmap)
 {
