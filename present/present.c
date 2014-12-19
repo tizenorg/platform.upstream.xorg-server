@@ -58,6 +58,17 @@ present_copy_region(DrawablePtr drawable,
     ScreenPtr   screen = drawable->pScreen;
     GCPtr       gc;
 
+#ifdef _F_DRI3_COPY_REGION_CB_
+    present_screen_priv_ptr     screen_priv = present_screen_priv(screen);
+
+    /* Can the DDX do copy by itself?*/
+    if(screen_priv->info->copy_region) {
+        if ((*screen_priv->info->copy_region) (drawable, pixmap, update, x_off, y_off)) {
+            return;
+        }
+    }
+#endif
+
     gc = GetScratchGC(drawable->depth, screen);
     if (update) {
         ChangeGCVal     changes[2];
