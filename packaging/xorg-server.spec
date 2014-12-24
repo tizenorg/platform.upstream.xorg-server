@@ -203,7 +203,6 @@ NOCONFIGURE=1 ./autogen.sh
                 -D_F_DPMS_PHONE_CTRL_ \
                 -D_F_DRI2_FIX_INVALIDATE \
                 -D_F_DRI2_SWAP_REGION_ \
-                -D_F_NOT_USE_SW_CURSOR_ \
                 -D_F_EXCLUDE_NON_MASK_SELECTED_FD_FROM_MAXCLIENTS_ \
                 -D_F_DRI3_COPY_REGION_CB_ \
  		" \
