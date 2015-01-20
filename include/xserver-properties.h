@@ -123,6 +123,13 @@
 #define AXIS_LABEL_PROP_ABS_MT_TOOL_Y      "Abs MT Tool Y"
 #define AXIS_LABEL_PROP_ABS_MISC        "Abs Misc"
 
+//#ifdef  _F_SET_PROPERTY_MT_
+#define AXIS_LABEL_PROP_ABS_MT_SLOT "Abs MT Slot"
+#define AXIS_LABEL_PROP_ABS_MT_DISTANCE "Abs MT Distance"
+#define AXIS_LABEL_PROP_ABS_MT_ANGLE "Abs MT Angle/MT Component"
+#define AXIS_LABEL_PROP_ABS_MT_PALM "Abs MT Palm/MT Sumsize"
+//#endif //_F_SET_PROPERTY_MT_
+
 /* Button names */
 #define BTN_LABEL_PROP "Button Labels"
 
