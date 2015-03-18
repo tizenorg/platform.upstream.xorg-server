@@ -249,7 +249,11 @@ DamageExtCreate(DrawablePtr pDrawable, DamageReportLevel level,
         return NULL;
 
     DamageExtRegister(pDrawable, pDamageExt->pDamage,
+#ifdef _F_DISABLE_NOTIFY_ON_DAMAGE_CREATE_
+                      FALSE);
+#else
                       pDrawable->type == DRAWABLE_WINDOW);
+#endif
 
     return pDamageExt;
 }

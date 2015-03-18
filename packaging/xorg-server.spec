@@ -205,6 +205,7 @@ NOCONFIGURE=1 ./autogen.sh
                 -D_F_DRI2_SWAP_REGION_ \
                 -D_F_EXCLUDE_NON_MASK_SELECTED_FD_FROM_MAXCLIENTS_ \
                 -D_F_DRI3_COPY_REGION_CB_ \
+                -D_F_DISABLE_NOTIFY_ON_DAMAGE_CREATE_ \
  		" \
 	CPPFLAGS="${CPPFLAGS} "
 
